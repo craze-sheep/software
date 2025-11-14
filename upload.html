@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>上传图像 - 水下图像修复系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }
+
+        .header-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .upload-section {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 12px;
+            padding: 60px 40px;
+            text-align: center;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .upload-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 25px;
+        }
+
+        .upload-formats {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .preview-section {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+        }
+
+        .preview-item {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #f0f0f0;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #999;
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .preview-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .preview-item:hover .preview-remove {
+            opacity: 1;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .info-box {
+            background: #e7f5ff;
+            border-left: 4px solid #1c7ed6;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-top: 25px;
+            font-size: 14px;
+            color: #1c7ed6;
+        }
+
+        .info-box strong {
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .upload-section, .preview-section {
+                padding: 25px;
+            }
+
+            .header-title {
+                font-size: 24px;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-title">🌊 上传图像</div>
+        <div class="header-subtitle">选择或拖拽您的水下图像文件</div>
+    </div>
+
+    <div class="container">
+        <div class="upload-section">
+            <div class="section-title">📤 选择图像</div>
+            
+            <div class="upload-area" id="uploadArea">
+                <span class="upload-icon">⬆️</span>
+                <div class="upload-text">拖拽文件到此处或点击选择</div>
+                <div class="upload-hint">您可以上传单张或多张图像</div>
+                <div class="upload-formats">
+                    支持格式：JPG、PNG、BMP、TIFF · 最大单文件：100MB
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                        📁 选择文件
+                    </button>
+                    <button class="btn btn-secondary">🗂️ 选择文件夹</button>
+                </div>
+            </div>
+
+            <input type="file" id="fileInput" class="file-input" multiple accept="image/*">
+
+            <div class="info-box">
+                <strong>💡 提示：</strong>不同的修复效果取决于图像的清晰度和颜色偏差程度。建议使用低对比度的蓝绿色图像以获得最佳效果。
+            </div>
+        </div>
+
+        <div class="preview-section">
+            <div class="section-title">📸 已选择的图像</div>
+            
+            <div id="previewContainer">
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <div>暂无图像，请先上传</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px; display: flex; gap: 15px; justify-content: center;">
+                <button class="btn btn-primary" style="flex: 1;">✓ 开始修复</button>
+                <button class="btn btn-secondary" style="flex: 1;">↻ 清空重置</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#764ba2';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.borderColor = '#667eea';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+            handleFiles(e.dataTransfer.files);
+        });
+
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            const previewHTML = Array.from(files).map(file => `
+                <div class="preview-item">
+                    <img src="${URL.createObjectURL(file)}" alt="${file.name}">
+                    <button class="preview-remove">✕</button>
+                </div>
+            `).join('');
+
+            previewContainer.innerHTML = `
+                <div class="preview-grid">
+                    ${previewHTML}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

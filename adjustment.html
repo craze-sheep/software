@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>参数调整 - 水下图像修复系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+        }
+
+        .main-area {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .preview-area {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .preview-image {
+            border-radius: 12px;
+            overflow: hidden;
+            background: #f0f0f0;
+            aspect-ratio: 4/3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preview-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .preview-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .preview-image:first-child {
+            position: relative;
+        }
+
+        .preview-image:first-child .preview-label {
+            background: rgba(102, 126, 234, 0.9);
+        }
+
+        .preview-image:last-child {
+            position: relative;
+        }
+
+        .preview-image:last-child .preview-label {
+            background: rgba(81, 207, 102, 0.9);
+        }
+
+        .adjust-panel {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .param-group {
+            margin-bottom: 30px;
+        }
+
+        .param-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .param-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .param-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #f0f0f0;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .slider::-moz-range-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+
+        .param-description {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+        }
+
+        .preset-section {
+            margin-top: 30px;
+            padding-top: 25px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .preset-btn {
+            padding: 10px 15px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .preset-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f0f0;
+            border-color: #d0d0d0;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .preview-area {
+                grid-template-columns: 1fr;
+            }
+
+            .preset-buttons {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                gap: 20px;
+            }
+
+            .adjust-panel {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-area">
+            <div class="preview-area">
+                <div class="preview-image">
+                    <div class="preview-label">原始图像</div>
+                    <img src="/placeholder.svg?height=400&width=600" alt="原始图像">
+                </div>
+                <div class="preview-image">
+                    <div class="preview-label">修复预览</div>
+                    <img src="/placeholder.svg?height=400&width=600" alt="修复预览">
+                </div>
+            </div>
+
+            <div class="adjust-panel">
+                <div class="panel-title">🎛️ 修复参数调整</div>
+
+                <!-- 颜色校正组 -->
+                <div style="margin-bottom: 30px;">
+                    <h3 style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 15px; text-transform: uppercase;">颜色校正</h3>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">红通道补偿</span>
+                            <span class="param-value" id="value1">70%</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="70" class="slider" id="slider1" oninput="updateValue(1)">
+                        <div class="param-description">增强红光强度，校正蓝绿色偏</div>
+                    </div>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">色温调整</span>
+                            <span class="param-value" id="value2">+20</span>
+                        </div>
+                        <input type="range" min="-50" max="50" value="20" class="slider" id="slider2" oninput="updateValue(2)">
+                        <div class="param-description">-50(偏冷) 到 +50(偏暖)</div>
+                    </div>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">饱和度增强</span>
+                            <span class="param-value" id="value3">120%</span>
+                        </div>
+                        <input type="range" min="0" max="200" value="120" class="slider" id="slider3" oninput="updateValue(3)">
+                        <div class="param-description">增强色彩饱和度和生动度</div>
+                    </div>
+                </div>
+
+                <!-- 对比度增强组 -->
+                <div style="margin-bottom: 30px;">
+                    <h3 style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 15px; text-transform: uppercase;">对比度增强</h3>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">对比度强度</span>
+                            <span class="param-value" id="value4">1.8</span>
+                        </div>
+                        <input type="range" min="1" max="3" step="0.1" value="1.8" class="slider" id="slider4" oninput="updateValue(4)">
+                        <div class="param-description">1.0(无增强) 到 3.0(最强)</div>
+                    </div>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">锐化程度</span>
+                            <span class="param-value" id="value5">60%</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="60" class="slider" id="slider5" oninput="updateValue(5)">
+                        <div class="param-description">提高图像边缘清晰度</div>
+                    </div>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">去雾强度</span>
+                            <span class="param-value" id="value6">75%</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="75" class="slider" id="slider6" oninput="updateValue(6)">
+                        <div class="param-description">减弱散射雾霾效果</div>
+                    </div>
+                </div>
+
+                <!-- 去散射去噪组 -->
+                <div style="margin-bottom: 30px;">
+                    <h3 style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 15px; text-transform: uppercase;">去散射去噪</h3>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">去噪强度</span>
+                            <span class="param-value" id="value7">50%</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="50" class="slider" id="slider7" oninput="updateValue(7)">
+                        <div class="param-description">移除噪声和颗粒感</div>
+                    </div>
+
+                    <div class="param-group">
+                        <div class="param-label">
+                            <span class="param-name">保边程度</span>
+                            <span class="param-value" id="value8">70%</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="70" class="slider" id="slider8" oninput="updateValue(8)">
+                        <div class="param-description">在去噪时保留重要边缘</div>
+                    </div>
+                </div>
+
+                <div class="preset-section">
+                    <div style="font-size: 13px; font-weight: 700; color: #333; margin-bottom: 10px;">快速预设</div>
+                    <div class="preset-buttons">
+                        <button class="preset-btn">📌 浅水场景</button>
+                        <button class="preset-btn">🌊 深水场景</button>
+                        <button class="preset-btn">💨 浑浊水体</button>
+                        <button class="preset-btn">🎨 自定义</button>
+                        <button class="preset-btn">↻ 重置参数</button>
+                        <button class="preset-btn">💾 保存预设</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="info-card">
+                <div class="info-title">📊 图像信息</div>
+                <div class="info-item">
+                    <span>文件名</span>
+                    <span style="color: #333;">coral_reef.jpg</span>
+                </div>
+                <div class="info-item">
+                    <span>分辨率</span>
+                    <span style="color: #333;">1920×1080</span>
+                </div>
+                <div class="info-item">
+                    <span>文件大小</span>
+                    <span style="color: #333;">2.3 MB</span>
+                </div>
+                <div class="info-item">
+                    <span>处理耗时</span>
+                    <span style="color: #333;">2.1 秒</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-title">⚡ 快速操作</div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary">✓ 应用修复</button>
+                    <button class="btn btn-secondary">👁️ 全屏预览</button>
+                    <button class="btn btn-secondary">📋 对比详情</button>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-title">💡 建议</div>
+                <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                    <p>• 对于浑浊水体，建议增加去雾强度</p>
+                    <p style="margin-top: 8px;">• 避免过度锐化导致伪影</p>
+                    <p style="margin-top: 8px;">• 保存参数组合以便后续快速应用</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateValue(id) {
+            const slider = document.getElementById('slider' + id);
+            const valueDisplay = document.getElementById('value' + id);
+            
+            if (id === 2) {
+                valueDisplay.textContent = (slider.value > 0 ? '+' : '') + slider.value;
+            } else if (id === 4) {
+                valueDisplay.textContent = parseFloat(slider.value).toFixed(1);
+            } else {
+                valueDisplay.textContent = slider.value + '%';
+            }
+        }
+    </script>
+</body>
+</html>

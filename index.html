@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水下图像修复系统 - 主仪表板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-logout {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-logout:hover {
+            background: #ff5252;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome-banner {
+            background: white;
+            padding: 25px 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .welcome-text {
+            font-size: 18px;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .welcome-subtext {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .action-card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .action-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .action-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .action-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .action-desc {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .btn-action {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-action:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border-top: 3px solid;
+        }
+
+        .stat-card.primary {
+            border-top-color: #667eea;
+        }
+
+        .stat-card.success {
+            border-top-color: #51cf66;
+        }
+
+        .stat-card.warning {
+            border-top-color: #ffd43b;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            color: #51cf66;
+            margin-top: 8px;
+        }
+
+        .recent-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-top: 40px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f9f9f9;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .history-item:hover {
+            background: #f0f0f0;
+        }
+
+        .history-info {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex: 1;
+        }
+
+        .history-icon {
+            font-size: 32px;
+        }
+
+        .history-details h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .history-details p {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .history-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d3f9d8;
+            color: #2f9e44;
+        }
+
+        .status-processing {
+            background: #e7f5ff;
+            color: #1c7ed6;
+        }
+
+        @media (max-width: 768px) {
+            .quick-actions {
+                grid-template-columns: 1fr;
+            }
+            
+            header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+
+            .header-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-title">🌊 水下图像修复系统</div>
+        <div class="header-actions">
+            <button class="btn btn-secondary">⚙️ 设置</button>
+            <button class="btn btn-secondary">❓ 帮助</button>
+            <button class="btn btn-logout">退出登录</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="welcome-banner">
+            <div class="welcome-text">欢迎，李浩</div>
+            <div class="welcome-subtext">今天是 2024年11月12日 · 准备好修复您的水下图像了吗？</div>
+        </div>
+
+        <div class="quick-actions">
+            <div class="action-card">
+                <div class="action-icon">📤</div>
+                <div class="action-title">上传图像</div>
+                <div class="action-desc">选择或拖拽上传您的水下图像</div>
+                <button class="btn-action">开始上传</button>
+            </div>
+
+            <div class="action-card">
+                <div class="action-icon">⚡</div>
+                <div class="action-title">自动修复</div>
+                <div class="action-desc">一键智能修复，快速获得结果</div>
+                <button class="btn-action">自动修复</button>
+            </div>
+
+            <div class="action-card">
+                <div class="action-icon">🎛️</div>
+                <div class="action-title">手动调整</div>
+                <div class="action-desc">精细控制每个修复参数</div>
+                <button class="btn-action">手动调整</button>
+            </div>
+
+            <div class="action-card">
+                <div class="action-icon">📦</div>
+                <div class="action-title">批量处理</div>
+                <div class="action-desc">批量处理多张图像</div>
+                <button class="btn-action">批量处理</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card primary">
+                <div class="stat-label">已处理图像</div>
+                <div class="stat-value">127</div>
+                <div class="stat-change">↑ 12 本月</div>
+            </div>
+
+            <div class="stat-card success">
+                <div class="stat-label">平均UIQM提升</div>
+                <div class="stat-value">+68%</div>
+                <div class="stat-change">优秀成果</div>
+            </div>
+
+            <div class="stat-card warning">
+                <div class="stat-label">总处理时间</div>
+                <div class="stat-value">12h 45m</div>
+                <div class="stat-change">平均处理时间</div>
+            </div>
+        </div>
+
+        <div class="recent-section">
+            <div class="section-title">📋 最近处理</div>
+            
+            <div class="history-item">
+                <div class="history-info">
+                    <div class="history-icon">🖼️</div>
+                    <div class="history-details">
+                        <h4>underwater_coral_01.jpg</h4>
+                        <p>2024-11-12 14:30 · 2.3MB · 1920×1080</p>
+                    </div>
+                </div>
+                <div class="history-status status-success">✓ 已完成</div>
+            </div>
+
+            <div class="history-item">
+                <div class="history-info">
+                    <div class="history-icon">🖼️</div>
+                    <div class="history-details">
+                        <h4>deep_sea_creatures.jpg</h4>
+                        <p>2024-11-12 13:15 · 3.1MB · 2560×1920</p>
+                    </div>
+                </div>
+                <div class="history-status status-success">✓ 已完成</div>
+            </div>
+
+            <div class="history-item">
+                <div class="history-info">
+                    <div class="history-icon">🖼️</div>
+                    <div class="history-details">
+                        <h4>murky_water_sample.jpg</h4>
+                        <p>2024-11-12 10:45 · 1.8MB · 1280×960</p>
+                    </div>
+                </div>
+                <div class="history-status status-processing">⏳ 处理中</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# Root Node artifacts
+node_modules/
+npm-debug.log*
+
+# Frontend build/dep folders
+relaize/frontend/node_modules/
+relaize/frontend/dist/
+relaize/frontend/.vite/
+
+# Backend Python artifacts
+__pycache__/
+*.pyc
+.python-version
+.venv/
+env/
+venv/
+
+# Backend runtime data
+relaize/backend/storage/
+relaize/backend/backend-*.log
+relaize/backend/*.db
+
+# Environment files
+.env
+*.env
+relaize/**/.env
+!relaize/backend/.env.example
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build outputs
+dist/

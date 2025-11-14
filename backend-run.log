@@ -1,0 +1,11 @@
+INFO:     127.0.0.1:59855 - "GET /api/health HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59879 - "GET /api/health/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60690 - "GET /api/tasks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63720 - "GET /api/tasks?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65250 - "POST /api/uploads HTTP/1.1" 201 Created
+INFO:     127.0.0.1:65250 - "GET /api/tasks?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60575 - "GET /api/tasks?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60575 - "GET /api/tasks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59628 - "GET /api/tasks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61402 - "GET /api/tasks/14418b36-882e-4cfb-a214-92981dea6985/source HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56740 - "GET /api/tasks/14418b36-882e-4cfb-a214-92981dea6985/preview HTTP/1.1" 200 OK
