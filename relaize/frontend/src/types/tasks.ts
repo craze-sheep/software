@@ -1,4 +1,15 @@
+import type { AdjustmentKey } from "../store/adjustmentStore";
+
 export type TaskStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+
+export type AdjustmentParameters = Partial<Record<AdjustmentKey, number>>;
+
+export type AdjustmentPayload = {
+  preset_id?: string | null;
+  parameters: AdjustmentParameters;
+  note?: string | null;
+  saved_at?: string | null;
+};
 
 export interface TaskSummary {
   id: string;
@@ -10,6 +21,7 @@ export interface TaskSummary {
   source_url?: string | null;
   metrics?: Record<string, { before: number; after: number; delta: number }>;
   processed_at?: string | null;
+  adjustments?: AdjustmentPayload | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { SliderControl } from "../components/ui/SliderControl";
 import { useAdjustmentStore } from "../store/adjustmentStore";
 import type { AdjustmentKey } from "../store/adjustmentStore";
-import { fetchTasks, processTask, resolveFileUrl } from "../lib/api";
-import type { TaskSummary } from "../types/tasks";
+import { applyAdjustments, fetchTasks, resolveFileUrl } from "../lib/api";
+import type { AdjustmentPayload, TaskSummary } from "../types/tasks";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
 type PresetOption = {
@@ -65,9 +65,44 @@ const PRESET_OPTIONS: PresetOption[] = [
   },
 ];
 
+const PRESET_STORAGE_KEY = "adjustment:lastPreset";
+
+const isPresetOptionId = (value: string | null | undefined): value is PresetOption["id"] =>
+  Boolean(value && PRESET_OPTIONS.some((option) => option.id === value));
+
+type StoredPreset = {
+  parameters: Record<AdjustmentKey, number>;
+  presetId: PresetOption["id"] | "custom";
+  savedAt: string;
+};
+
+const loadStoredPreset = (): StoredPreset | null => {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as StoredPreset;
+    if (!parsed?.parameters) return null;
+    return parsed;
+  } catch (error) {
+    console.warn("Failed to parse stored preset", error);
+    return null;
+  }
+};
+
+const persistStoredPreset = (snapshot: StoredPreset) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn("Failed to persist preset", error);
+  }
+};
+
 export const AdjustmentPage = () => {
   const navigate = useNavigate();
-  const { parameters, setParameter, reset } = useAdjustmentStore();
+  const queryClient = useQueryClient();
+  const { parameters, setParameter, setParameters, reset } = useAdjustmentStore();
   const { data: tasks = [] } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
@@ -75,7 +110,7 @@ export const AdjustmentPage = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activePresetId, setActivePresetId] = useState<string>("custom");
+  const [activePresetId, setActivePresetId] = useState<PresetOption["id"] | "custom">("custom");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const selectedTask: TaskSummary | undefined =
@@ -83,6 +118,41 @@ export const AdjustmentPage = () => {
   const beforeImage = resolveFileUrl(selectedTask?.source_url);
   const afterImage = resolveFileUrl(selectedTask?.preview_url);
   const isCustomMode = activePresetId === "custom";
+  const currentModeLabel =
+    activePresetId === "custom"
+      ? "自定义"
+      : PRESET_OPTIONS.find((option) => option.id === activePresetId)?.label ?? "预设";
+
+  useEffect(() => {
+    const presetFromStorage = loadStoredPreset();
+    const applySnapshot = (snapshot: StoredPreset | null) => {
+      reset();
+      if (snapshot) {
+        setParameters(snapshot.parameters);
+        setActivePresetId(snapshot.presetId);
+      } else {
+        setActivePresetId("custom");
+      }
+    };
+
+    if (!selectedTask) {
+      applySnapshot(presetFromStorage);
+      return;
+    }
+
+    if (selectedTask.adjustments?.parameters) {
+      applySnapshot({
+        parameters: selectedTask.adjustments.parameters as Record<AdjustmentKey, number>,
+        presetId: isPresetOptionId(selectedTask.adjustments.preset_id)
+          ? (selectedTask.adjustments.preset_id as PresetOption["id"])
+          : "custom",
+        savedAt: selectedTask.adjustments.saved_at ?? new Date().toISOString(),
+      });
+      return;
+    }
+
+    applySnapshot(presetFromStorage);
+  }, [selectedTask?.id, selectedTask?.adjustments?.saved_at, reset, setParameters]);
 
   const sliderConfigs = useMemo<
     {
@@ -160,15 +230,19 @@ export const AdjustmentPage = () => {
   const applyPreset = (presetId: PresetOption["id"]) => {
     const preset = PRESET_OPTIONS.find((item) => item.id === presetId);
     if (!preset) return;
-    Object.entries(preset.values).forEach(([key, value]) => {
-      setParameter(key as AdjustmentKey, value as number);
-    });
+    setParameters(preset.values);
     setActivePresetId(presetId);
     setStatusMessage(`已应用「${preset.label}」预设，可继续微调后点击应用修复。`);
     setErrorMessage(null);
   };
 
   const handleSavePreset = () => {
+    const snapshot: StoredPreset = {
+      parameters: { ...parameters },
+      presetId: activePresetId,
+      savedAt: new Date().toISOString(),
+    };
+    persistStoredPreset(snapshot);
     setStatusMessage("已保存当前参数组合，下次将默认加载。");
     setErrorMessage(null);
   };
@@ -178,12 +252,28 @@ export const AdjustmentPage = () => {
       setErrorMessage("请先选择要处理的任务");
       return;
     }
+    const taskId = selectedTask.id;
+    const taskName = selectedTask.filename;
+    const payload: AdjustmentPayload = {
+      parameters: { ...parameters },
+      preset_id: isCustomMode ? null : activePresetId,
+      note: isCustomMode ? "自定义调参参数" : `使用预设「${currentModeLabel}」提交`,
+    };
     setIsApplying(true);
     setStatusMessage("正在提交参数并重新调度修复…");
     setErrorMessage(null);
     try {
-      await processTask(selectedTask.id);
-      setStatusMessage("参数已提交至后端，稍后在效果对比页查看结果。");
+      await applyAdjustments(taskId, payload);
+      persistStoredPreset({
+        parameters: { ...parameters },
+        presetId: activePresetId,
+        savedAt: new Date().toISOString(),
+      });
+      setStatusMessage(`「${taskName}」已提交新参数，任务已重新排队处理。`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+        queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] }),
+      ]);
     } catch (error) {
       console.error(error);
       setErrorMessage("提交失败，请稍后重试或检查后端日志。");
@@ -206,19 +296,20 @@ export const AdjustmentPage = () => {
   };
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="space-y-8">
-        <div className="flex flex-col gap-3 rounded-3xl bg-white/90 p-6 shadow-card md:flex-row md:items-center md:justify-between">
+    <div className="grid gap-6 items-stretch xl:grid-cols-[minmax(0,1.35fr)_280px] 2xl:grid-cols-[minmax(0,1.55fr)_320px]">
+      <div className="space-y-6">
+        <div className="flex flex-col gap-3 rounded-3xl bg-white/90 p-5 shadow-card md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-slate-500">选择需要调参的任务</p>
             <h2 className="text-2xl font-semibold text-slate-800">{selectedTask?.filename ?? "暂无任务"}</h2>
           </div>
-          <select
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700"
-            value={selectedTask?.id ?? ""}
-            onChange={(event) => setSelectedTaskId(event.target.value)}
-            disabled={!tasks.length}
-          >
+          <div className="w-full max-w-md md:w-96">
+            <select
+              className="w-full truncate rounded-full border border-slate-200 px-5 py-2.5 text-base text-slate-700"
+              value={selectedTask?.id ?? ""}
+              onChange={(event) => setSelectedTaskId(event.target.value)}
+              disabled={!tasks.length}
+            >
             {!tasks.length ? (
               <option value="">暂无任务</option>
             ) : (
@@ -228,10 +319,11 @@ export const AdjustmentPage = () => {
                 </option>
               ))
             )}
-          </select>
+            </select>
+          </div>
         </div>
 
-        <section className="grid gap-4 rounded-3xl bg-white/90 p-6 shadow-card md:grid-cols-2">
+        <section className="grid gap-3 rounded-3xl bg-white/90 p-5 shadow-card md:grid-cols-2">
           <div className="relative overflow-hidden rounded-2xl bg-slate-100">
             <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white">
               原始图像
@@ -256,10 +348,19 @@ export const AdjustmentPage = () => {
           </div>
         </section>
 
-        <section className="space-y-6 rounded-3xl bg-white/90 p-6 shadow-card">
-          <header>
-            <h2 className="text-xl font-semibold text-slate-800">参数调整</h2>
-            <p className="text-sm text-slate-500">使用滑块控制颜色、对比度与去噪强度</p>
+        <section className="space-y-5 rounded-3xl bg-white/90 p-5 shadow-card">
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-800">参数调整</h2>
+              <p className="text-sm text-slate-500">使用滑块控制颜色、对比度与去噪强度</p>
+            </div>
+            <span
+              className={`rounded-full px-4 py-1 text-sm font-semibold ${
+                isCustomMode ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-brand-primary"
+              }`}
+            >
+              当前模式：{currentModeLabel}
+            </span>
           </header>
           <div className="grid gap-4 md:grid-cols-4">
             {sliderConfigs.map((config) => (
@@ -277,11 +378,11 @@ export const AdjustmentPage = () => {
               />
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap xl:gap-4">
             {PRESET_OPTIONS.map((preset) => (
               <button
                 key={preset.id}
-                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-full border px-4 py-2 text-sm font-semibold whitespace-nowrap transition ${
                   activePresetId === preset.id
                     ? "border-brand-primary bg-indigo-50 text-brand-primary"
                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -293,7 +394,7 @@ export const AdjustmentPage = () => {
               </button>
             ))}
             <button
-              className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+              className={`rounded-full border px-4 py-2 text-sm font-semibold whitespace-nowrap ${
                 activePresetId === "custom"
                   ? "border-brand-primary bg-indigo-50 text-brand-primary"
                   : "border-slate-200 text-slate-600"
@@ -302,23 +403,20 @@ export const AdjustmentPage = () => {
             >
               🎨 自定义
             </button>
-            <button className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600" onClick={reset}>
+            <button className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 whitespace-nowrap" onClick={reset}>
               ↻ 重置参数
             </button>
             <button
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 md:ml-auto"
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 whitespace-nowrap md:ml-auto"
               onClick={handleSavePreset}
             >
               💾 保存预设
             </button>
           </div>
         </section>
-        <p className={`text-xs ${isCustomMode ? "text-emerald-600" : "text-slate-500"}`}>
-          {isCustomMode ? "当前为自定义模式，可自由调参" : "当前预设锁定参数，如需微调请选择「自定义」"}
-        </p>
       </div>
 
-      <aside className="space-y-6 rounded-3xl bg-white/90 p-6 shadow-card">
+      <aside className="flex h-full flex-col gap-5 rounded-3xl bg-white/90 p-5 shadow-card">
         <div>
           <h3 className="text-lg font-semibold text-slate-800">📊 图像信息</h3>
           <dl className="mt-4 space-y-3 text-sm text-slate-500">
