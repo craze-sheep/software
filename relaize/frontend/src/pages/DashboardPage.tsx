@@ -6,6 +6,7 @@ import { QuickActionCard } from "../components/cards/QuickActionCard";
 import { Section } from "../components/common/Section";
 import { StatCard } from "../components/ui/StatCard";
 import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
+import { StatusBadge } from "../components/ui/StatusBadge";
 import { fetchTasks } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 
@@ -118,19 +119,7 @@ export const DashboardPage = () => {
                     {task.size ? `${(task.size / 1024 / 1024).toFixed(2)} MB` : "未知大小"}
                   </p>
                 </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                    task.status === "completed"
-                      ? "bg-emerald-100 text-emerald-600"
-                      : task.status === "processing"
-                        ? "bg-blue-100 text-blue-600"
-                        : task.status === "failed"
-                          ? "bg-rose-100 text-rose-600"
-                          : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {task.status}
-                </span>
+                <StatusBadge status={task.status} />
                 <button
                   className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
                   onClick={() => setSelectedTaskId(task.id)}

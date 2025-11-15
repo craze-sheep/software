@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchTasks, resolveFileUrl } from "../lib/api";
@@ -17,12 +17,17 @@ export const ComparisonPage = () => {
   const [mode, setMode] = useState<ComparisonMode>("split");
   const [sliderPosition, setSliderPosition] = useState(50);
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialTaskId =
+    (location.state as { taskId?: string } | null)?.taskId ?? null;
+  const [activeTool, setActiveTool] = useState("🔍 放大镜");
+  const [downloadInfo, setDownloadInfo] = useState<string | null>(null);
   const { data: tasks = [], isFetching } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
   });
   const completedTasks = tasks.filter((task) => task.preview_url && task.source_url);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
 
   const selectedTask: TaskSummary | undefined = useMemo(() => {
     if (!selectedTaskId) {
@@ -73,16 +78,51 @@ export const ComparisonPage = () => {
     [selectedTask],
   );
 
-  const handleDownload = () => {
+  const toolOptions = [
+    {
+      label: "🔍 放大镜",
+      description: "开启虚拟放大镜，观察局部纹理变化。",
+    },
+    {
+      label: "📍 标注工具",
+      description: "为可疑区域添加标注，便于质检沟通。",
+    },
+    {
+      label: "🔄 同步浏览",
+      description: "左右图保持同步缩放，方便逐像素比对。",
+    },
+    {
+      label: "📊 显示指标",
+      description: "叠加 UIQM / UCIQE 曲线，快速识别异常。",
+    },
+    {
+      label: "⬇️ 导出对比图",
+      description: "导出当前模式视图，生成 PPT 报告素材。",
+    },
+  ];
+
+  const handleDownload = async () => {
     if (!resolvedPreviewUrl || !selectedTask) return;
-    const anchor = document.createElement("a");
-    anchor.href = resolvedPreviewUrl;
-    anchor.download = `enhanced-${selectedTask.filename}`;
-    anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    setDownloadInfo("正在准备下载…");
+    try {
+      const response = await fetch(resolvedPreviewUrl);
+      if (!response.ok) {
+        throw new Error("无法获取修复结果");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `enhanced-${selectedTask.filename}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setDownloadInfo("修复图像已保存到本地。");
+    } catch (error) {
+      console.error(error);
+      setDownloadInfo("下载失败，请稍后重试。");
+    }
   };
 
   return (
@@ -197,14 +237,22 @@ export const ComparisonPage = () => {
           </div>
           <div className="space-y-4 rounded-3xl bg-white/90 p-6 shadow-card">
             <h3 className="text-lg font-semibold text-slate-800">工具栏</h3>
-            {["🔍 放大镜", "📍 标注工具", "🔄 同步浏览", "📊 显示指标", "⬇️ 导出对比图"].map((tool) => (
+            {toolOptions.map((tool) => (
               <button
-                key={tool}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                key={tool.label}
+                className={`w-full rounded-xl border px-4 py-2 text-left text-sm font-semibold transition ${
+                  activeTool === tool.label
+                    ? "border-brand-primary bg-indigo-50 text-brand-primary"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => setActiveTool(tool.label)}
               >
-                {tool}
+                {tool.label}
               </button>
             ))}
+            <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
+              {toolOptions.find((tool) => tool.label === activeTool)?.description}
+            </p>
           </div>
         </div>
       ) : null}
@@ -243,6 +291,9 @@ export const ComparisonPage = () => {
           ↩️ 返回首页
         </button>
       </div>
+      {downloadInfo ? (
+        <p className="text-center text-xs text-slate-500">{downloadInfo}</p>
+      ) : null}
     </div>
   );
 };

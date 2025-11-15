@@ -17,3 +17,21 @@ body {
 #root {
   min-height: 100vh;
 }
+
+@layer components {
+  .status-badge {
+    @apply inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide;
+  }
+
+  .status-badge--md {
+    @apply px-3 py-1 text-[11px] md:text-xs;
+  }
+
+  .status-badge--sm {
+    @apply px-2 py-0.5 text-[10px];
+  }
+
+  .step-chip {
+    @apply inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-1 text-xs font-semibold text-slate-500 shadow-sm;
+  }
+}

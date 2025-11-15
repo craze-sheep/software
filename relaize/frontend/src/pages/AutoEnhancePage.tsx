@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchTasks, processTask } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
+import { StatusBadge } from "../components/ui/StatusBadge";
 
 type Preset = {
   id: string;
@@ -81,6 +82,27 @@ export const AutoEnhancePage = () => {
   const selectedPreset =
     presets.find((preset) => preset.id === selectedPresetId) ?? presets[0];
 
+  const steps = [
+    {
+      key: "select-preset",
+      title: "1. 选择策略",
+      detail: selectedPreset.title,
+      done: Boolean(selectedPresetId),
+    },
+    {
+      key: "select-task",
+      title: "2. 勾选任务",
+      detail: selectedTaskIds.length ? `${selectedTaskIds.length} 个` : "等待选择",
+      done: Boolean(selectedTaskIds.length),
+    },
+    {
+      key: "execute",
+      title: "3. 执行",
+      detail: "点击下方按钮",
+      done: false,
+    },
+  ];
+
   const toggleTask = (taskId: string) => {
     setSelectedTaskIds((prev) =>
       prev.includes(taskId)
@@ -139,7 +161,7 @@ export const AutoEnhancePage = () => {
 
   return (
     <div className="space-y-8">
-      <header className="rounded-3xl bg-gradient-to-r from-brand-primary to-brand-secondary p-8 text-white shadow-card">
+      <header className="space-y-6 rounded-3xl bg-gradient-to-r from-brand-primary to-brand-secondary p-8 text-white shadow-card">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] opacity-80">自动修复编排中心</p>
@@ -162,6 +184,19 @@ export const AutoEnhancePage = () => {
               <p className="text-2xl font-semibold">{stats.failed}</p>
             </div>
           </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {steps.map((step) => (
+            <span
+              key={step.key}
+              className="step-chip"
+              aria-live="polite"
+              aria-label={step.title}
+            >
+              {step.title}
+              <span className="text-[11px] text-slate-400">{step.detail}</span>
+            </span>
+          ))}
         </div>
       </header>
 
@@ -306,17 +341,7 @@ export const AutoEnhancePage = () => {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      task.status === "failed"
-                        ? "bg-rose-100 text-rose-600"
-                        : task.status === "processing"
-                          ? "bg-blue-100 text-blue-600"
-                          : "bg-amber-100 text-amber-600"
-                    }`}
-                  >
-                    {task.status}
-                  </span>
+                  <StatusBadge status={task.status} size="sm" />
                   <button
                     type="button"
                     className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
@@ -344,4 +369,3 @@ export const AutoEnhancePage = () => {
     </div>
   );
 };
-

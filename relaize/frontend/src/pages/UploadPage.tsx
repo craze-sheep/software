@@ -1,9 +1,29 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { cancelTask, fetchTasks, processTask, uploadImage } from "../lib/api";
+import { cancelTask, fetchTasks, processTask, uploadImage, resolveFileUrl } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
+import { StatusBadge } from "../components/ui/StatusBadge";
+
+type WebkitFileSystemEntry = {
+  isFile: boolean;
+  isDirectory: boolean;
+  file: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
+  createReader?: () => WebkitFileSystemDirectoryReader;
+};
+
+type WebkitFileSystemDirectoryReader = {
+  readEntries: (
+    success: (entries: WebkitFileSystemEntry[]) => void,
+    error?: (error: DOMException) => void,
+  ) => void;
+};
+
+type DataTransferItemWithWebkit = DataTransferItem & {
+  webkitGetAsEntry?: () => WebkitFileSystemEntry | null;
+};
 
 type PreviewFile = {
   id: string;
@@ -16,12 +36,64 @@ const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   timeStyle: "short",
 });
 
+const collectFilesFromEntries = async (entry: WebkitFileSystemEntry, files: File[]): Promise<void> => {
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) => entry.file(resolve, reject));
+    files.push(file);
+    return;
+  }
+  if (entry.isDirectory && entry.createReader) {
+    const reader = entry.createReader();
+    await new Promise<void>((resolve, reject) => {
+      const readBatch = () => {
+        reader.readEntries(
+          async (entries) => {
+            if (!entries.length) {
+              resolve();
+              return;
+            }
+            await Promise.all(entries.map((child) => collectFilesFromEntries(child, files)));
+            readBatch();
+          },
+          (error) => {
+            if (error) reject(error);
+          },
+        );
+      };
+      readBatch();
+    });
+  }
+};
+
+const collectFilesFromItems = async (
+  items: DataTransferItemList | DataTransferItem[],
+): Promise<File[]> => {
+  const collected: File[] = [];
+  const pending: Promise<void>[] = [];
+  const itemArray = Array.isArray(items) ? items : Array.from(items);
+
+  itemArray.forEach((item) => {
+    if (item.kind !== "file") return;
+    const entry = (item as DataTransferItemWithWebkit).webkitGetAsEntry?.();
+    if (entry) {
+      pending.push(collectFilesFromEntries(entry, collected));
+    } else {
+      const file = item.getAsFile();
+      if (file) collected.push(file);
+    }
+  });
+
+  await Promise.all(pending);
+  return collected;
+};
+
 export const UploadPage = () => {
   const [files, setFiles] = useState<PreviewFile[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -38,9 +110,15 @@ export const UploadPage = () => {
       }),
   });
 
-  const addFiles = useCallback((list: FileList | null) => {
+  const addFiles = useCallback((list: FileList | File[] | null) => {
     if (!list) return;
-    const next = Array.from(list).map((file) => ({
+    const fileArray = Array.isArray(list) ? list : Array.from(list);
+    const usableFiles = fileArray.filter((file) => file.type.startsWith("image/"));
+    if (!usableFiles.length) {
+      setErrorMessage("请选择图像文件（JPG、PNG、BMP、TIFF）");
+      return;
+    }
+    const next = usableFiles.map((file) => ({
       id: crypto.randomUUID(),
       file,
       previewUrl: URL.createObjectURL(file),
@@ -50,12 +128,80 @@ export const UploadPage = () => {
 
   const removeFile = (id: string) => {
     setFiles((prev) => {
-      prev.find((item) => {
-        if (item.id === id) URL.revokeObjectURL(item.previewUrl);
-        return false;
-      });
+      const target = prev.find((item) => item.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((item) => item.id !== id);
     });
+  };
+
+  useEffect(
+    () => () => {
+      files.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    },
+    [files],
+  );
+
+  const handleDrop = useCallback(
+    async (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      try {
+        const items = event.dataTransfer?.items;
+        if (items && Array.from(items).some((item) => (item as DataTransferItemWithWebkit).webkitGetAsEntry?.())) {
+          const folderFiles = await collectFilesFromItems(items);
+          addFiles(folderFiles);
+          setStatusMessage(`已从拖拽的文件夹导入 ${folderFiles.length} 个文件`);
+          setErrorMessage(null);
+        } else {
+          addFiles(event.dataTransfer?.files ?? null);
+        }
+      } catch (error) {
+        console.error(error);
+        setErrorMessage("解析文件夹内容失败，请重试或使用最新浏览器");
+      }
+    },
+    [addFiles],
+  );
+
+  const handleFolderButtonClick = async () => {
+    const directoryPicker = (window as typeof window & {
+      showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+    }).showDirectoryPicker;
+
+    if (directoryPicker) {
+      try {
+        const dirHandle = await directoryPicker();
+        const collected: File[] = [];
+
+        const walkDirectory = async (handle: FileSystemDirectoryHandle) => {
+          for await (const entry of handle.values()) {
+            if (entry.kind === "file") {
+              const file = await entry.getFile();
+              collected.push(file);
+            } else if (entry.kind === "directory") {
+              await walkDirectory(entry);
+            }
+          }
+        };
+
+        await walkDirectory(dirHandle);
+        addFiles(collected);
+        setStatusMessage(`已从 ${dirHandle.name} 导入 ${collected.length} 个文件`);
+        setErrorMessage(null);
+        return;
+      } catch (error) {
+        if ((error as DOMException).name === "AbortError") {
+          return;
+        }
+        console.error(error);
+        setErrorMessage("读取文件夹失败，请重试或使用最新浏览器");
+      }
+    }
+
+    if (folderInputRef.current) {
+      folderInputRef.current.click();
+    } else {
+      setErrorMessage("当前浏览器暂不支持文件夹上传，请尝试 Chrome 107+");
+    }
   };
 
   const handleUpload = async () => {
@@ -122,6 +268,34 @@ export const UploadPage = () => {
     }
   };
 
+  const handleDownloadResult = async (task: TaskSummary) => {
+    const fileUrl = resolveFileUrl(task.preview_url ?? undefined);
+    if (!fileUrl) {
+      setErrorMessage("该任务暂无可下载的修复结果");
+      return;
+    }
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error("failed to fetch result");
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `enhanced-${task.filename}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(blobUrl);
+      setStatusMessage(`已下载 ${task.filename} 的修复结果`);
+      setErrorMessage(null);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("下载修复结果失败，请稍后再试");
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="text-center text-white">
@@ -135,10 +309,7 @@ export const UploadPage = () => {
         <div
           className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-brand-primary/60 bg-gradient-to-r from-indigo-50 to-purple-50 p-10 text-center"
           onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault();
-            addFiles(event.dataTransfer.files);
-          }}
+          onDrop={handleDrop}
         >
           <span className="text-6xl">⬆️</span>
           <h3 className="text-xl font-semibold text-slate-800">拖拽文件到此处或点击选择</h3>
@@ -151,7 +322,11 @@ export const UploadPage = () => {
             >
               📁 选择文件
             </button>
-            <button type="button" className="rounded-full bg-slate-100 px-5 py-2 text-sm font-semibold text-slate-600">
+            <button
+              type="button"
+              className="rounded-full bg-slate-100 px-5 py-2 text-sm font-semibold text-slate-600"
+              onClick={handleFolderButtonClick}
+            >
               🗂️ 选择文件夹
             </button>
           </div>
@@ -162,6 +337,24 @@ export const UploadPage = () => {
             multiple
             accept="image/*"
             onChange={(event) => addFiles(event.target.files)}
+          />
+          <input
+            ref={(element) => {
+              folderInputRef.current = element;
+              if (element) {
+                element.setAttribute("webkitdirectory", "true");
+                element.setAttribute("directory", "");
+              }
+            }}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(event) => {
+              addFiles(event.target.files);
+              if (event.target) {
+                event.target.value = "";
+              }
+            }}
           />
         </div>
         <div className="mt-6 rounded-2xl border-l-4 border-blue-500 bg-blue-50 p-4 text-sm text-blue-600">
@@ -258,68 +451,70 @@ export const UploadPage = () => {
           </div>
         ) : (
           <div className="mt-6 space-y-3">
-            {sortedTasks.map((task) => (
-              <div
-                key={task.id}
-                className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <p className="font-semibold text-slate-800">{task.filename}</p>
-                  <p className="text-xs text-slate-500">
-                    {dateFormatter.format(new Date(task.created_at))} · {task.size ? (task.size / 1024 / 1024).toFixed(2) : "?"} MB
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                      task.status === "completed"
-                        ? "bg-emerald-100 text-emerald-600"
-                        : task.status === "processing"
-                          ? "bg-blue-100 text-blue-600"
-                          : task.status === "failed"
-                            ? "bg-rose-100 text-rose-600"
-                            : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {task.status}
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
-                      onClick={() => setSelectedTaskId(task.id)}
-                    >
-                      查看详情
-                    </button>
-                    {(task.status === "failed" || task.status === "cancelled") && (
+            {sortedTasks.map((task) => {
+              const previewUrl = resolveFileUrl(task.preview_url ?? undefined);
+              return (
+                <div
+                  key={task.id}
+                  className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm md:flex-row md:items-center md:gap-6"
+                >
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-800">{task.filename}</p>
+                    <p className="text-xs text-slate-500">
+                      {dateFormatter.format(new Date(task.created_at))} ·{" "}
+                      {task.size ? (task.size / 1024 / 1024).toFixed(2) : "?"} MB
+                    </p>
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end md:gap-3">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={task.status} />
+                      {previewUrl ? (
+                        <button
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                          onClick={() => handleDownloadResult(task)}
+                        >
+                          下载修复
+                        </button>
+                      ) : null}
+                      {previewUrl ? (
+                        <a
+                          href={previewUrl}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-brand-secondary"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          在线预览
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
-                        onClick={() => handleReprocess(task.id)}
+                        onClick={() => setSelectedTaskId(task.id)}
                       >
-                        重新处理
+                        查看详情
                       </button>
-                    )}
-                    {(task.status === "pending" || task.status === "processing") && (
-                      <button
-                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-red-500"
-                        onClick={() => handleCancel(task.id)}
-                      >
-                        取消任务
-                      </button>
-                    )}
+                      {(task.status === "failed" || task.status === "cancelled") && (
+                        <button
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                          onClick={() => handleReprocess(task.id)}
+                        >
+                          重新处理
+                        </button>
+                      )}
+                      {(task.status === "pending" || task.status === "processing") && (
+                        <button
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-red-500"
+                          onClick={() => handleCancel(task.id)}
+                        >
+                          取消任务
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {task.preview_url ? (
-                    <a
-                      href={task.preview_url}
-                      className="text-sm font-semibold text-brand-secondary underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      预览
-                    </a>
-                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
