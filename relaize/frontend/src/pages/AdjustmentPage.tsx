@@ -75,13 +75,14 @@ export const AdjustmentPage = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [activePresetId, setActivePresetId] = useState<string>("custom");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const selectedTask: TaskSummary | undefined =
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
   const beforeImage = resolveFileUrl(selectedTask?.source_url);
   const afterImage = resolveFileUrl(selectedTask?.preview_url);
+  const isCustomMode = activePresetId === "custom";
 
   const sliderConfigs = useMemo<
     {
@@ -205,7 +206,7 @@ export const AdjustmentPage = () => {
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-8">
         <div className="flex flex-col gap-3 rounded-3xl bg-white/90 p-6 shadow-card md:flex-row md:items-center md:justify-between">
           <div>
@@ -260,7 +261,7 @@ export const AdjustmentPage = () => {
             <h2 className="text-xl font-semibold text-slate-800">参数调整</h2>
             <p className="text-sm text-slate-500">使用滑块控制颜色、对比度与去噪强度</p>
           </header>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-4">
             {sliderConfigs.map((config) => (
               <SliderControl
                 key={config.key}
@@ -272,10 +273,11 @@ export const AdjustmentPage = () => {
                 description={config.description}
                 formatValue={config.formatValue}
                 onValueChange={(value) => setParameter(config.key, value)}
+                disabled={!isCustomMode}
               />
             ))}
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {PRESET_OPTIONS.map((preset) => (
               <button
                 key={preset.id}
@@ -304,13 +306,16 @@ export const AdjustmentPage = () => {
               ↻ 重置参数
             </button>
             <button
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 md:ml-auto"
               onClick={handleSavePreset}
             >
               💾 保存预设
             </button>
           </div>
         </section>
+        <p className={`text-xs ${isCustomMode ? "text-emerald-600" : "text-slate-500"}`}>
+          {isCustomMode ? "当前为自定义模式，可自由调参" : "当前预设锁定参数，如需微调请选择「自定义」"}
+        </p>
       </div>
 
       <aside className="space-y-6 rounded-3xl bg-white/90 p-6 shadow-card">

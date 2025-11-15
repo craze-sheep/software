@@ -110,7 +110,7 @@ export const DashboardPage = () => {
             {recentTasks.map((task) => (
               <div
                 key={task.id}
-                className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm md:flex-row md:items-center md:justify-between"
+                className="grid gap-3 rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-sm md:grid-cols-[1fr,120px,auto] md:items-center"
               >
                 <div>
                   <p className="font-semibold text-slate-800">{task.filename}</p>
@@ -119,9 +119,11 @@ export const DashboardPage = () => {
                     {task.size ? `${(task.size / 1024 / 1024).toFixed(2)} MB` : "未知大小"}
                   </p>
                 </div>
-                <StatusBadge status={task.status} />
+                <div className="justify-self-center md:justify-self-start">
+                  <StatusBadge status={task.status} />
+                </div>
                 <button
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
+                  className="justify-self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 md:justify-self-end"
                   onClick={() => setSelectedTaskId(task.id)}
                 >
                   查看详情

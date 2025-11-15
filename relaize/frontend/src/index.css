@@ -20,7 +20,9 @@ body {
 
 @layer components {
   .status-badge {
-    @apply inline-flex items-center gap-1 rounded-full font-semibold uppercase tracking-wide;
+    @apply inline-flex items-center justify-center gap-1 rounded-full font-semibold uppercase tracking-wide;
+    min-width: 84px;
+    text-align: center;
   }
 
   .status-badge--md {

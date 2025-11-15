@@ -22,6 +22,7 @@ export const ComparisonPage = () => {
     (location.state as { taskId?: string } | null)?.taskId ?? null;
   const [activeTool, setActiveTool] = useState("🔍 放大镜");
   const [downloadInfo, setDownloadInfo] = useState<string | null>(null);
+  const [toolHint, setToolHint] = useState<string>("选择工具以查看提示或操作");
   const { data: tasks = [], isFetching } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
@@ -82,24 +83,38 @@ export const ComparisonPage = () => {
     {
       label: "🔍 放大镜",
       description: "开启虚拟放大镜，观察局部纹理变化。",
+      hint: "放大镜将在下个版本支持，可先使用全屏预览放大查看细节。",
     },
     {
       label: "📍 标注工具",
       description: "为可疑区域添加标注，便于质检沟通。",
+      hint: "标注功能即将接入，当前建议在下载后的图片中添加标注。",
     },
     {
       label: "🔄 同步浏览",
       description: "左右图保持同步缩放，方便逐像素比对。",
+      hint: "同步滑动已默认开启，可配合滑动对比模式一起使用。",
     },
     {
       label: "📊 显示指标",
       description: "叠加 UIQM / UCIQE 曲线，快速识别异常。",
+      hint: "指标字幕已在下方展示，后续会在图像上叠加曲线。",
     },
     {
       label: "⬇️ 导出对比图",
       description: "导出当前模式视图，生成 PPT 报告素材。",
+      hint: "已为您触发下载，若浏览器阻止弹窗，请允许下载权限。",
+      action: "download" as const,
     },
   ];
+
+  const handleToolClick = async (tool: (typeof toolOptions)[number]) => {
+    setActiveTool(tool.label);
+    setToolHint(tool.hint ?? tool.description);
+    if (tool.action === "download") {
+      await handleDownload();
+    }
+  };
 
   const handleDownload = async () => {
     if (!resolvedPreviewUrl || !selectedTask) return;
@@ -134,7 +149,7 @@ export const ComparisonPage = () => {
         </div>
         <div className="flex flex-wrap gap-2">
           <select
-            className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm text-white"
+            className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-inner focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"
             value={selectedTask?.id ?? ""}
             onChange={(event) => setSelectedTaskId(event.target.value)}
             disabled={!completedTasks.length}
@@ -187,11 +202,17 @@ export const ComparisonPage = () => {
       ) : null}
 
       {completedTasks.length && mode === "slider" ? (
-        <div className="relative h-[420px] overflow-hidden rounded-3xl bg-slate-900 shadow-card">
+        <div className="relative h-[560px] overflow-hidden rounded-3xl bg-slate-900 shadow-card md:h-[520px]">
+          <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-2 text-xs font-semibold text-white">
+            <span className="rounded-full bg-brand-primary/80 px-3 py-1">原始图像</span>
+          </div>
+          <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-2 text-xs font-semibold text-white">
+            <span className="rounded-full bg-emerald-500/80 px-3 py-1">修复后图像</span>
+          </div>
           <img
             src={beforeImage}
             alt="原始图像"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-contain bg-black"
           />
           <div
             className="absolute inset-0 overflow-hidden"
@@ -200,7 +221,7 @@ export const ComparisonPage = () => {
             <img
               src={afterImage}
               alt="修复后图像"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain bg-black"
             />
           </div>
           <div
@@ -245,14 +266,14 @@ export const ComparisonPage = () => {
                     ? "border-brand-primary bg-indigo-50 text-brand-primary"
                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
                 }`}
-                onClick={() => setActiveTool(tool.label)}
+                onClick={() => handleToolClick(tool)}
               >
                 {tool.label}
               </button>
             ))}
-            <p className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
-              {toolOptions.find((tool) => tool.label === activeTool)?.description}
-            </p>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              {toolHint}
+            </div>
           </div>
         </div>
       ) : null}
