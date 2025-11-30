@@ -6,6 +6,7 @@ export type AdjustmentParameters = Partial<Record<AdjustmentKey, number>>;
 
 export type AdjustmentPayload = {
   preset_id?: string | null;
+  model_name?: string | null;
   parameters: AdjustmentParameters;
   note?: string | null;
   saved_at?: string | null;
@@ -28,4 +29,9 @@ export interface TaskSummary {
 
 export interface TaskDetail extends TaskSummary {
   message?: string | null;
+}
+
+export interface TaskPreviewResponse {
+  preview_base64: string;
+  metrics: Record<string, { before: number; after: number; delta: number }>;
 }

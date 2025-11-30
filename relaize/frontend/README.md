@@ -26,7 +26,7 @@ VITE_API_BASE_URL=http://localhost:8000/api
 src/
   components/   # UI 组件、卡片、滑块
   layouts/      # 布局（含导航、头部）
-  pages/        # 对应 index/upload/adjustment/comparison/report 页面
+  pages/        # 对应 upload / adjustment / report 页面
   store/        # Zustand 状态
   lib/          # Axios 实例等
 ```

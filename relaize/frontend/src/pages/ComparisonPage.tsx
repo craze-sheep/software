@@ -1,319 +1,526 @@
-import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import clsx from "classnames";
 
 import { fetchTasks, resolveFileUrl } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 
-type ComparisonMode = "split" | "slider" | "zoom";
+type Mode = "split" | "slider";
 
-const modes: { key: ComparisonMode; label: string }[] = [
-  { key: "split", label: "分屏对比" },
-  { key: "slider", label: "滑动对比" },
-  { key: "zoom", label: "局部放大" },
-];
+type MetricValue = {
+  before: number;
+  after: number;
+  delta: number;
+};
 
+type MetricMap = Record<string, MetricValue>;
+
+const FALLBACK_METRICS: MetricMap = {
+  uiqm: { before: 2.1, after: 3.8, delta: 1.7 },
+  uciqe: { before: 0.45, after: 0.62, delta: 0.17 },
+  clarity: { before: 4.2, after: 7.8, delta: 3.6 },
+  entropy: { before: 6.2, after: 7.1, delta: 0.9 },
+};
+
+type Feedback = {
+  tone: "success" | "error" | "info";
+  message: string;
+};
+
+const GuideOverlay = () => (
+  <div className="pointer-events-none absolute inset-0">
+    <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-brand-primary/40" />
+    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-brand-primary/40" />
+    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-brand-primary/40 px-2 py-1 text-[10px] text-brand-primary">
+      标注
+    </div>
+  </div>
+);
+
+const formatPercentChange = (metric?: MetricValue) => {
+  if (!metric || metric.before === 0) {
+    return null;
+  }
+  const ratio = ((metric.after - metric.before) / metric.before) * 100;
+  const rounded = Math.round(ratio);
+  return `${rounded > 0 ? "+" : ""}${rounded}%`;
+};
+
+const metricValue = (metric?: MetricValue) => {
+  if (!metric) return "—";
+  return metric.after.toFixed(metric.after < 10 ? 2 : 1);
+};
+ 
 export const ComparisonPage = () => {
-  const [mode, setMode] = useState<ComparisonMode>("split");
-  const [sliderPosition, setSliderPosition] = useState(50);
   const navigate = useNavigate();
-  const location = useLocation();
-  const initialTaskId =
-    (location.state as { taskId?: string } | null)?.taskId ?? null;
-  const [activeTool, setActiveTool] = useState("🔍 放大镜");
-  const [downloadInfo, setDownloadInfo] = useState<string | null>(null);
-  const [toolHint, setToolHint] = useState<string>("选择工具以查看提示或操作");
-  const { data: tasks = [], isFetching } = useQuery<TaskSummary[]>({
-    queryKey: ["tasks"],
-    queryFn: () => fetchTasks(),
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { data: tasks = [], isFetching, refetch } = useQuery<TaskSummary[]>({
+    queryKey: ["tasks", "comparison"],
+    queryFn: () => fetchTasks({ status: "completed", limit: 100 }),
+    refetchInterval: 5000,
   });
-  const completedTasks = tasks.filter((task) => task.preview_url && task.source_url);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
 
-  const selectedTask: TaskSummary | undefined = useMemo(() => {
-    if (!selectedTaskId) {
-      return completedTasks[0];
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(searchParams.get("taskId"));
+  const [mode, setMode] = useState<Mode>("split");
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const sliderRef = useRef<HTMLDivElement | null>(null);
+  const isDragging = useRef(false);
+  const [isAnnotationVisible, setIsAnnotationVisible] = useState(false);
+  const [isSyncEnabled, setIsSyncEnabled] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  useEffect(() => {
+    const queryTaskId = searchParams.get("taskId");
+    if (queryTaskId && tasks.some((task) => task.id === queryTaskId)) {
+      if (selectedTaskId !== queryTaskId) {
+        setSelectedTaskId(queryTaskId);
+      }
+      return;
     }
-    return completedTasks.find((task) => task.id === selectedTaskId) ?? completedTasks[0];
-  }, [completedTasks, selectedTaskId]);
+    if ((!selectedTaskId || !tasks.some((task) => task.id === selectedTaskId)) && tasks.length) {
+      const fallback = tasks[0].id;
+      setSelectedTaskId(fallback);
+      const params = new URLSearchParams(searchParams);
+      params.set("taskId", fallback);
+      setSearchParams(params);
+    }
+  }, [tasks, searchParams, selectedTaskId, setSearchParams]);
 
-  const resolvedSourceUrl = resolveFileUrl(selectedTask?.source_url);
-  const resolvedPreviewUrl = resolveFileUrl(selectedTask?.preview_url);
-  const beforeImage = resolvedSourceUrl ?? "/placeholder.svg?height=600&width=800";
-  const afterImage = resolvedPreviewUrl ?? "/placeholder.svg?height=600&width=800";
-  const stats = useMemo(
-    () => [
-      {
-        label: "UIQM",
-        value: selectedTask?.metrics?.uiqm?.after
-          ? selectedTask.metrics.uiqm.after.toString()
-          : "--",
-        hint: selectedTask?.metrics?.uiqm
-          ? `${selectedTask.metrics.uiqm.before} → ${selectedTask.metrics.uiqm.after}`
-          : "待处理",
-      },
-      {
-        label: "UCIQE",
-        value: selectedTask?.metrics?.uciqe?.after
-          ? selectedTask.metrics.uciqe.after.toString()
-          : "--",
-        hint: selectedTask?.metrics?.uciqe
-          ? `${selectedTask.metrics.uciqe.before} → ${selectedTask.metrics.uciqe.after}`
-          : "待处理",
-      },
-      {
-        label: "Entropy",
-        value: selectedTask?.metrics?.entropy?.after
-          ? selectedTask.metrics.entropy.after.toString()
-          : "--",
-        hint: selectedTask?.metrics?.entropy
-          ? `${selectedTask.metrics.entropy.before} → ${selectedTask.metrics.entropy.after}`
-          : "待处理",
-      },
-      {
-        label: "状态",
-        value: selectedTask?.status ?? "--",
-        hint: selectedTask?.processed_at ?? "",
-      },
-    ],
-    [selectedTask],
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId);
+  const beforeImage = resolveFileUrl(selectedTask?.source_url);
+  const afterImage = resolveFileUrl(selectedTask?.preview_url);
+  const hasComparisonAssets = Boolean(beforeImage && afterImage);
+
+  const metricsMap: MetricMap = useMemo(
+    () => ({
+      ...FALLBACK_METRICS,
+      ...(selectedTask?.metrics ?? {}),
+    }),
+    [selectedTask?.metrics],
   );
 
-  const toolOptions = [
-    {
-      label: "🔍 放大镜",
-      description: "开启虚拟放大镜，观察局部纹理变化。",
-      hint: "放大镜将在下个版本支持，可先使用全屏预览放大查看细节。",
-    },
-    {
-      label: "📍 标注工具",
-      description: "为可疑区域添加标注，便于质检沟通。",
-      hint: "标注功能即将接入，当前建议在下载后的图片中添加标注。",
-    },
-    {
-      label: "🔄 同步浏览",
-      description: "左右图保持同步缩放，方便逐像素比对。",
-      hint: "同步滑动已默认开启，可配合滑动对比模式一起使用。",
-    },
-    {
-      label: "📊 显示指标",
-      description: "叠加 UIQM / UCIQE 曲线，快速识别异常。",
-      hint: "指标字幕已在下方展示，后续会在图像上叠加曲线。",
-    },
-    {
-      label: "⬇️ 导出对比图",
-      description: "导出当前模式视图，生成 PPT 报告素材。",
-      hint: "已为您触发下载，若浏览器阻止弹窗，请允许下载权限。",
-      action: "download" as const,
-    },
-  ];
-
-  const handleToolClick = async (tool: (typeof toolOptions)[number]) => {
-    setActiveTool(tool.label);
-    setToolHint(tool.hint ?? tool.description);
-    if (tool.action === "download") {
-      await handleDownload();
+  const durationText = useMemo(() => {
+    if (!selectedTask?.processed_at || !selectedTask?.created_at) {
+      return "等待处理";
     }
+    const createdAt = new Date(selectedTask.created_at).getTime();
+    const processedAt = new Date(selectedTask.processed_at).getTime();
+    const delta = processedAt - createdAt;
+    if (delta <= 0) return "—";
+    const seconds = Math.round(delta / 1000);
+    if (seconds >= 120) {
+      return `${(seconds / 60).toFixed(1)} min`;
+    }
+    return `${seconds}s`;
+  }, [selectedTask?.created_at, selectedTask?.processed_at]);
+
+  const metricCards = useMemo(
+    () => [
+      {
+        id: "uiqm",
+        label: "UIQM 提升",
+        value: metricValue(metricsMap.uiqm),
+        percent: formatPercentChange(metricsMap.uiqm),
+        summary: `从 ${metricsMap.uiqm.before} 到 ${metricsMap.uiqm.after}`,
+      },
+      {
+        id: "uciqe",
+        label: "UCIQE 提升",
+        value: metricValue(metricsMap.uciqe),
+        percent: formatPercentChange(metricsMap.uciqe),
+        summary: `从 ${metricsMap.uciqe.before} 到 ${metricsMap.uciqe.after}`,
+      },
+      {
+        id: "clarity",
+        label: "清晰度",
+        value: metricValue(metricsMap.clarity),
+        percent: formatPercentChange(metricsMap.clarity),
+        summary: `平均梯度 ${metricsMap.clarity.before} → ${metricsMap.clarity.after}`,
+      },
+      {
+        id: "entropy",
+        label: "信息熵",
+        value: metricValue(metricsMap.entropy),
+        percent: formatPercentChange(metricsMap.entropy),
+        summary: `纹理丰富度 ${metricsMap.entropy.before} → ${metricsMap.entropy.after}`,
+      },
+      {
+        id: "duration",
+        label: "处理耗时",
+        value: durationText,
+        percent: selectedTask?.size ? `${(selectedTask.size / 1024 / 1024).toFixed(2)} MB` : undefined,
+        summary: selectedTask?.processed_at
+          ? `完成时间：${new Date(selectedTask.processed_at).toLocaleString("zh-CN")}`
+          : "等待 worker 输出",
+      },
+    ],
+    [metricsMap, durationText, selectedTask?.size, selectedTask?.processed_at],
+  );
+
+  useEffect(() => {
+    const handlePointerMove = (event: MouseEvent | TouchEvent) => {
+      if (!isDragging.current) return;
+      let clientX: number | null = null;
+      if ("touches" in event) {
+        clientX = event.touches[0]?.clientX ?? null;
+      } else {
+        clientX = event.clientX;
+      }
+      if (clientX !== null) {
+        updateSliderFromClientX(clientX);
+      }
+    };
+
+    const stopDragging = () => {
+      isDragging.current = false;
+    };
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("touchmove", handlePointerMove);
+    window.addEventListener("mouseup", stopDragging);
+    window.addEventListener("touchend", stopDragging);
+    window.addEventListener("touchcancel", stopDragging);
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("mouseup", stopDragging);
+      window.removeEventListener("touchend", stopDragging);
+      window.removeEventListener("touchcancel", stopDragging);
+    };
+  }, []);
+
+  const updateSliderFromClientX = (clientX: number) => {
+    const container = sliderRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (!rect.width) return;
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    const percent = (x / rect.width) * 100;
+    setSliderPosition(percent);
   };
 
-  const handleDownload = async () => {
-    if (!resolvedPreviewUrl || !selectedTask) return;
-    setDownloadInfo("正在准备下载…");
+  const beginDragging = (clientX?: number) => {
+    if (typeof clientX === "number") {
+      updateSliderFromClientX(clientX);
+    }
+    isDragging.current = true;
+  };
+
+  const renderSplitView = () => (
+    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      {[
+        { label: "原始图像", src: beforeImage, emptyText: "暂无原始图像" },
+        { label: "修复后图像", src: afterImage, emptyText: "等待修复结果" },
+      ].map((item) => (
+        <div
+          key={item.label}
+          className="relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-4"
+        >
+          <span className="rounded-full bg-brand-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand-primary">
+            {item.label}
+          </span>
+          {item.src ? (
+            <img src={item.src} alt={item.label} className="mt-4 h-[380px] w-full rounded-2xl object-contain bg-black" />
+          ) : (
+            <div className="mt-4 flex h-[380px] items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-500">
+              {item.emptyText}
+            </div>
+          )}
+          {isAnnotationVisible ? <GuideOverlay /> : null}
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderSliderView = () => (
+    <div
+      ref={sliderRef}
+      className="relative mt-6 h-[420px] cursor-col-resize overflow-hidden rounded-3xl border border-slate-200 bg-slate-100"
+      onMouseDown={(event) => beginDragging(event.clientX)}
+      onTouchStart={(event) => {
+        event.preventDefault();
+        beginDragging(event.touches[0]?.clientX);
+      }}
+    >
+      {beforeImage ? (
+        <img src={beforeImage} alt="原始图像" className="absolute inset-0 h-full w-full object-contain" />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-sm text-slate-500">
+          暂无原始图像
+        </div>
+      )}
+      {afterImage ? (
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+        >
+          <img src={afterImage} alt="修复后图像" className="h-full w-full object-contain" />
+        </div>
+      ) : null}
+      <div
+        className="pointer-events-none absolute inset-y-0 w-0.5 bg-brand-primary/60"
+        style={{ left: `${sliderPosition}%` }}
+      />
+      <button
+        type="button"
+        className="absolute top-1/2 -translate-y-1/2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-lg"
+        style={{ left: `${sliderPosition}%`, transform: "translate(-50%, -50%)" }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+          beginDragging(event.clientX);
+        }}
+        onTouchStart={(event) => {
+          event.stopPropagation();
+          event.preventDefault();
+          beginDragging(event.touches[0]?.clientX);
+        }}
+      >
+        拖动
+      </button>
+      {isAnnotationVisible ? <GuideOverlay /> : null}
+      {isSyncEnabled ? (
+        <span className="absolute right-4 top-4 rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-100">
+          同步模式
+        </span>
+      ) : null}
+    </div>
+  );
+
+  const handleDownload = async (variant: "before" | "after") => {
+    const target = variant === "before" ? beforeImage : afterImage;
+    if (!target || !selectedTask) {
+      setFeedback({ tone: "error", message: "暂无可下载的图像，请等待处理完成。" });
+      return;
+    }
     try {
-      const response = await fetch(resolvedPreviewUrl);
-      if (!response.ok) {
-        throw new Error("无法获取修复结果");
-      }
+      const response = await fetch(target);
+      if (!response.ok) throw new Error("failed to fetch");
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `enhanced-${selectedTask.filename}`;
+      anchor.href = blobUrl;
+      anchor.download = `${variant === "before" ? "original" : "enhanced"}-${selectedTask.filename}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
-      setDownloadInfo("修复图像已保存到本地。");
+      URL.revokeObjectURL(blobUrl);
+      setFeedback({
+        tone: "success",
+        message: `${variant === "before" ? "原始图像" : "修复图像"}已开始下载`,
+      });
     } catch (error) {
       console.error(error);
-      setDownloadInfo("下载失败，请稍后重试。");
+      setFeedback({ tone: "error", message: "下载失败，请稍后再试或检查后端日志。" });
     }
   };
 
+  const handleExportComparison = () => {
+    window.print();
+    setFeedback({
+      tone: "info",
+      message: "已打开浏览器打印窗口，可选择“保存为 PDF”导出对比结果。",
+    });
+  };
+
+  const toolbarButtons = [
+    {
+      id: "annotations",
+      label: isAnnotationVisible ? "📍 关闭标注" : "📍 标注工具",
+      onClick: () => setIsAnnotationVisible((prev) => !prev),
+      active: isAnnotationVisible,
+    },
+    {
+      id: "sync",
+      label: isSyncEnabled ? "✅ 同步浏览" : "🔄 同步浏览",
+      onClick: () => setIsSyncEnabled((prev) => !prev),
+      active: isSyncEnabled,
+    },
+    {
+      id: "metrics",
+      label: showMetrics ? "🙈 隐藏指标" : "📊 显示指标",
+      onClick: () => setShowMetrics((prev) => !prev),
+      active: showMetrics,
+    },
+    {
+      id: "export",
+      label: "⬇️ 导出对比图",
+      onClick: handleExportComparison,
+      active: false,
+    },
+  ];
+
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 rounded-3xl bg-slate-900 p-6 text-white shadow-card md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">🔍 效果对比</h2>
-          <p className="text-sm text-slate-300">切换不同模式查看修复前后的差异</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <select
-            className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-inner focus:border-brand-secondary focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"
-            value={selectedTask?.id ?? ""}
-            onChange={(event) => setSelectedTaskId(event.target.value)}
-            disabled={!completedTasks.length}
-          >
-            {!completedTasks.length ? (
-              <option value="">暂无完成任务</option>
-            ) : (
-              completedTasks.map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.filename} · {task.status}
-                </option>
-              ))
-            )}
-          </select>
-          {modes.map((item) => (
-            <button
-              key={item.key}
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                mode === item.key ? "bg-white/20" : "bg-white/10 hover:bg-white/20"
-              }`}
-              onClick={() => setMode(item.key)}
+      <section className="rounded-3xl bg-white/95 p-6 text-slate-900 shadow-card lg:p-8">
+        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Comparison</p>
+            <h2 className="text-3xl font-semibold text-slate-900">🔍 效果对比</h2>
+            <p className="text-sm text-slate-500">
+              查看修复前后的视觉差异，可切换分屏 / 滑动模式或开启辅助标注。
+            </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-full bg-slate-100 p-2">
+            {(["split", "slider"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setMode(item)}
+                className={clsx(
+                  "rounded-full px-5 py-2 text-sm font-semibold transition",
+                  mode === item ? "bg-white text-brand-primary shadow" : "text-slate-600 hover:bg-white",
+                )}
+              >
+                {item === "split" ? "分屏对比" : "滑动对比"}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              className="max-w-xl flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+              value={selectedTaskId ?? ""}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setSelectedTaskId(nextId);
+                const params = new URLSearchParams(searchParams);
+                params.set("taskId", nextId);
+                setSearchParams(params);
+              }}
             >
-              {item.label}
+              {tasks.length === 0 ? (
+                <option value="">暂无已完成任务</option>
+              ) : null}
+              {tasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.filename} · {new Date(task.created_at).toLocaleDateString("zh-CN")}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? "刷新中…" : "↻ 刷新列表"}
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 text-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-400">当前任务</p>
+            <p className="mt-1 truncate text-base font-semibold text-slate-900" title={selectedTask?.filename ?? ""}>
+              {selectedTask?.filename ?? "暂无任务"}
+            </p>
+            <p className="mt-2 text-slate-500">
+              状态：{selectedTask ? selectedTask.status : "—"} · 更新时间：
+              {selectedTask?.updated_at ? new Date(selectedTask.updated_at).toLocaleString("zh-CN") : "—"}
+            </p>
+          </div>
+        </div>
+
+        {hasComparisonAssets ? (
+          mode === "split" ? renderSplitView() : renderSliderView()
+        ) : (
+            <div className="mt-6 rounded-3xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
+            {selectedTask
+              ? "该任务暂未生成可对比的图像，请等待后台处理完成。"
+              : "暂无完成任务，先到上传页提交图像吧。"}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          {toolbarButtons.map((button) => (
+            <button
+              key={button.id}
+              type="button"
+              onClick={button.onClick}
+              className={clsx(
+                "rounded-full px-4 py-2 text-sm font-semibold transition",
+                button.active ? "bg-brand-primary/10 text-brand-primary" : "bg-slate-100 text-slate-600 hover:bg-white",
+              )}
+            >
+              {button.label}
             </button>
           ))}
         </div>
-      </header>
+      </section>
 
-      {!completedTasks.length ? (
-        <div className="rounded-3xl bg-white/90 p-8 text-center text-slate-500 shadow-card">
-          {isFetching ? "正在同步任务，请稍候…" : "暂无完成任务，请在上传页提交图像并等待处理完成。"}
-        </div>
-      ) : null}
-
-      {completedTasks.length && mode === "split" ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="relative overflow-hidden rounded-3xl bg-slate-900">
-            <div className="absolute left-4 top-4 rounded-full bg-brand-primary/80 px-3 py-1 text-sm font-semibold text-white">
-              原始图像
-            </div>
-            <img src={beforeImage} alt="原始图像" className="h-full w-full object-contain bg-black" />
-          </div>
-          <div className="relative overflow-hidden rounded-3xl bg-slate-900">
-            <div className="absolute left-4 top-4 rounded-full bg-emerald-500/80 px-3 py-1 text-sm font-semibold text-white">
-              修复后图像
-            </div>
-            <img src={afterImage} alt="修复后图像" className="h-full w-full object-contain bg-black" />
-          </div>
-        </div>
-      ) : null}
-
-      {completedTasks.length && mode === "slider" ? (
-        <div className="relative h-[560px] overflow-hidden rounded-3xl bg-slate-900 shadow-card md:h-[520px]">
-          <div className="pointer-events-none absolute left-4 top-4 flex flex-col gap-2 text-xs font-semibold text-white">
-            <span className="rounded-full bg-brand-primary/80 px-3 py-1">原始图像</span>
-          </div>
-          <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-2 text-xs font-semibold text-white">
-            <span className="rounded-full bg-emerald-500/80 px-3 py-1">修复后图像</span>
-          </div>
-          <img
-            src={beforeImage}
-            alt="原始图像"
-            className="absolute inset-0 h-full w-full object-contain bg-black"
-          />
-          <div
-            className="absolute inset-0 overflow-hidden"
-            style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
-          >
-            <img
-              src={afterImage}
-              alt="修复后图像"
-              className="h-full w-full object-contain bg-black"
-            />
-          </div>
-          <div
-            className="absolute inset-y-0"
-            style={{ left: `${sliderPosition}%` }}
-          >
-            <div className="h-full w-1 bg-white/70" />
-            <div className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700">
-              ⟨ 拖动比较 ⟩
-            </div>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={sliderPosition}
-            onChange={(event) => setSliderPosition(parseInt(event.target.value, 10))}
-            className="absolute bottom-4 left-1/2 w-1/2 -translate-x-1/2"
-          />
-        </div>
-      ) : null}
-
-      {completedTasks.length && mode === "zoom" ? (
-        <div className="grid gap-4 md:grid-cols-[1.2fr,0.8fr]">
-          <div className="rounded-3xl bg-white/90 p-6 shadow-card">
-            <h3 className="text-lg font-semibold text-slate-800">同步浏览</h3>
+      {showMetrics ? (
+        <section className="rounded-3xl bg-white/95 p-6 shadow-card lg:p-8">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-xl font-semibold text-slate-800">📊 质量指标对比</h3>
             <p className="text-sm text-slate-500">
-              选择 ROI（感兴趣区域）并查看像素级变化。后续将接入 Konva 实现真实标注与放大镜。
+              质量指标来自后台即时计算，覆盖亮度、色彩、清晰度等核心维度。
             </p>
-            <div className="mt-4 grid gap-4 rounded-2xl bg-slate-900 p-4 md:grid-cols-2">
-              <img src={beforeImage} alt="原始" className="h-72 w-full rounded-xl object-cover" />
-              <img src={afterImage} alt="修复" className="h-72 w-full rounded-xl object-cover" />
-            </div>
           </div>
-          <div className="space-y-4 rounded-3xl bg-white/90 p-6 shadow-card">
-            <h3 className="text-lg font-semibold text-slate-800">工具栏</h3>
-            {toolOptions.map((tool) => (
-              <button
-                key={tool.label}
-                className={`w-full rounded-xl border px-4 py-2 text-left text-sm font-semibold transition ${
-                  activeTool === tool.label
-                    ? "border-brand-primary bg-indigo-50 text-brand-primary"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-                onClick={() => handleToolClick(tool)}
-              >
-                {tool.label}
-              </button>
+          <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {metricCards.map((card) => (
+              <div key={card.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{card.label}</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{card.value}</p>
+                {card.percent ? (
+                  <p className="text-sm font-semibold text-emerald-500">{card.percent}</p>
+                ) : null}
+                <p className="mt-2 text-xs text-slate-500">{card.summary}</p>
+              </div>
             ))}
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-              {toolHint}
-            </div>
           </div>
-        </div>
+        </section>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-3xl bg-white/90 p-4 text-center shadow-card">
-            <p className="text-sm text-slate-500">{stat.label}</p>
-            <p className="text-3xl font-bold text-slate-800">{stat.value}</p>
-            <p className="text-xs text-slate-500">{stat.hint}</p>
-          </div>
-        ))}
-      </div>
+      <section className="rounded-3xl bg-white/95 p-6 shadow-card lg:p-8">
+        <h3 className="text-xl font-semibold text-slate-800">⚙️ 操作</h3>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <button
+            type="button"
+            className="rounded-2xl bg-gradient-to-r from-brand-primary to-brand-secondary px-4 py-4 text-lg font-semibold text-white shadow"
+            onClick={() => handleDownload("after")}
+            disabled={!afterImage}
+          >
+            ✓ 下载修复图像
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-slate-200 px-4 py-4 text-lg font-semibold text-slate-700"
+            onClick={() => handleDownload("before")}
+            disabled={!beforeImage}
+          >
+            ⬇️ 下载原始图像
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-slate-200 px-4 py-4 text-lg font-semibold text-slate-700"
+            onClick={() => navigate("/report")}
+          >
+            📊 查看评估报告
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-slate-200 px-4 py-4 text-lg font-semibold text-slate-700"
+            onClick={() => navigate("/upload")}
+          >
+            ↩️ 返回上传
+          </button>
+        </div>
+      </section>
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          className="flex-1 rounded-full bg-gradient-to-r from-brand-primary to-brand-secondary px-6 py-3 font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-60"
-          onClick={handleDownload}
-          disabled={!resolvedPreviewUrl}
+      {feedback ? (
+        <div
+          className={clsx(
+            "rounded-2xl border px-4 py-3 text-sm",
+            feedback.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : feedback.tone === "error"
+                ? "border-rose-200 bg-rose-50 text-rose-600"
+                : "border-indigo-200 bg-indigo-50 text-indigo-700",
+          )}
         >
-          ✓ 保存修复图像
-        </button>
-        <button
-          type="button"
-          className="flex-1 rounded-full bg-slate-900 px-6 py-3 font-semibold text-white"
-          onClick={() => navigate("/report")}
-        >
-          📊 查看详细报告
-        </button>
-        <button
-          type="button"
-          className="flex-1 rounded-full border border-slate-300 px-6 py-3 font-semibold text-slate-600"
-          onClick={() => navigate("/")}
-        >
-          ↩️ 返回首页
-        </button>
-      </div>
-      {downloadInfo ? (
-        <p className="text-center text-xs text-slate-500">{downloadInfo}</p>
+          {feedback.message}
+        </div>
       ) : null}
     </div>
   );

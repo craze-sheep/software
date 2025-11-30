@@ -10,25 +10,26 @@ export type AdjustmentKey =
   | "denoise"
   | "edgePreserve";
 
-type AdjustmentState = {
-  parameters: Record<AdjustmentKey, number>;
-  setParameter: (key: AdjustmentKey, value: number) => void;
-  reset: () => void;
-};
-
-const defaultParams: Record<AdjustmentKey, number> = {
-  compensation: 70,
-  colorTemp: 20,
-  saturation: 120,
-  contrast: 1.8,
-  sharpness: 60,
-  dehaze: 75,
-  denoise: 50,
+export const DEFAULT_ADJUSTMENT_PARAMS: Record<AdjustmentKey, number> = {
+  compensation: 65,
+  colorTemp: 10,
+  saturation: 118,
+  contrast: 1.5,
+  sharpness: 55,
+  dehaze: 55,
+  denoise: 45,
   edgePreserve: 70,
 };
 
+type AdjustmentState = {
+  parameters: Record<AdjustmentKey, number>;
+  setParameter: (key: AdjustmentKey, value: number) => void;
+  setParameters: (values: Partial<Record<AdjustmentKey, number>>) => void;
+  reset: () => void;
+};
+
 export const useAdjustmentStore = create<AdjustmentState>((set) => ({
-  parameters: defaultParams,
+  parameters: { ...DEFAULT_ADJUSTMENT_PARAMS },
   setParameter: (key, value) =>
     set((state) => ({
       parameters: {
@@ -36,5 +37,12 @@ export const useAdjustmentStore = create<AdjustmentState>((set) => ({
         [key]: value,
       },
     })),
-  reset: () => set({ parameters: defaultParams }),
+  setParameters: (values) =>
+    set((state) => ({
+      parameters: {
+        ...state.parameters,
+        ...values,
+      },
+    })),
+  reset: () => set({ parameters: { ...DEFAULT_ADJUSTMENT_PARAMS } }),
 }));

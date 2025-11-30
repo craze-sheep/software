@@ -2,27 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { cancelTask, fetchTasks, processTask, uploadImage, resolveFileUrl } from "../lib/api";
+import { cancelTask, fetchTasks, processTask, resolveFileUrl, uploadImage } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
-type WebkitFileSystemEntry = {
-  isFile: boolean;
-  isDirectory: boolean;
-  file: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
-  createReader?: () => WebkitFileSystemDirectoryReader;
-};
-
-type WebkitFileSystemDirectoryReader = {
-  readEntries: (
-    success: (entries: WebkitFileSystemEntry[]) => void,
-    error?: (error: DOMException) => void,
-  ) => void;
-};
-
 type DataTransferItemWithWebkit = DataTransferItem & {
-  webkitGetAsEntry?: () => WebkitFileSystemEntry | null;
+  webkitGetAsEntry?: () => FileSystemEntry | null;
 };
 
 type PreviewFile = {
@@ -36,13 +22,18 @@ const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
   timeStyle: "short",
 });
 
-const collectFilesFromEntries = async (entry: WebkitFileSystemEntry, files: File[]): Promise<void> => {
-  if (entry.isFile) {
+const isFileEntry = (entry: FileSystemEntry): entry is FileSystemFileEntry => entry.isFile;
+
+const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry =>
+  entry.isDirectory;
+
+const collectFilesFromEntries = async (entry: FileSystemEntry, files: File[]): Promise<void> => {
+  if (isFileEntry(entry)) {
     const file = await new Promise<File>((resolve, reject) => entry.file(resolve, reject));
     files.push(file);
     return;
   }
-  if (entry.isDirectory && entry.createReader) {
+  if (isDirectoryEntry(entry)) {
     const reader = entry.createReader();
     await new Promise<void>((resolve, reject) => {
       const readBatch = () => {
@@ -173,12 +164,14 @@ export const UploadPage = () => {
         const collected: File[] = [];
 
         const walkDirectory = async (handle: FileSystemDirectoryHandle) => {
-          for await (const entry of handle.values()) {
+          const iterator = (handle as unknown as { entries?: () => AsyncIterableIterator<[string, FileSystemHandle]> }).entries?.();
+          if (!iterator) return;
+          for await (const [, entry] of iterator) {
             if (entry.kind === "file") {
-              const file = await entry.getFile();
+              const file = await (entry as FileSystemFileHandle).getFile();
               collected.push(file);
             } else if (entry.kind === "directory") {
-              await walkDirectory(entry);
+              await walkDirectory(entry as FileSystemDirectoryHandle);
             }
           }
         };
@@ -300,8 +293,8 @@ export const UploadPage = () => {
     <div className="space-y-8">
       <header className="text-center text-white">
         <div className="mx-auto max-w-3xl rounded-3xl bg-gradient-to-r from-brand-primary to-brand-secondary p-10 text-white shadow-card">
-          <h2 className="text-3xl font-bold">🌊 上传图像</h2>
-          <p className="text-sm opacity-80">选择或拖拽水下图像，支持批量上传</p>
+          <h2 className="text-3xl font-bold">📥 上传待修复图像</h2>
+          <p className="text-sm opacity-80">拖拽或选择文件，系统会自动识别夜景、雾霾、老照片、日常等场景</p>
         </div>
       </header>
 
@@ -313,7 +306,7 @@ export const UploadPage = () => {
         >
           <span className="text-6xl">⬆️</span>
           <h3 className="text-xl font-semibold text-slate-800">拖拽文件到此处或点击选择</h3>
-          <p className="text-sm text-slate-500">支持格式：JPG、PNG、BMP、TIFF · 最大单文件 100MB</p>
+          <p className="text-sm text-slate-500">支持 JPG / PNG / BMP / TIFF，单张建议不超过 100MB，便于浏览器本地处理</p>
           <div className="flex flex-wrap gap-4">
             <button
               type="button"
@@ -358,7 +351,7 @@ export const UploadPage = () => {
           />
         </div>
         <div className="mt-6 rounded-2xl border-l-4 border-blue-500 bg-blue-50 p-4 text-sm text-blue-600">
-          💡 提示：不同的修复效果取决于图像的清晰度和颜色偏差程度。建议优先上传低对比度的蓝绿色样本。
+          💡 提示：可在备注中标记预计场景（如夜景/雾霾/老照片/日常），系统会推荐对应模板并可在手动页面继续调参。
         </div>
       </section>
 
@@ -418,7 +411,7 @@ export const UploadPage = () => {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-800">📋 任务队列</h3>
-            <p className="text-sm text-slate-500">查看上传后的处理进度</p>
+            <p className="text-sm text-slate-500">查看上传后的处理进度，完成后可进入对比与评估页面</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <select

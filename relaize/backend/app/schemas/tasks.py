@@ -30,6 +30,7 @@ class TaskSummary(TaskBase):
     source_url: Optional[str] = None
     processed_at: Optional[datetime] = None
     metrics: Optional[dict] = None
+    adjustments: Optional[dict] = None
 
 
 class TaskDetail(TaskSummary):
@@ -48,4 +49,16 @@ class TaskUpdate(BaseModel):
     message: Optional[str] = None
     preview_url: Optional[str] = None
     processed_at: Optional[datetime] = None
+    adjustments: Optional[dict] = None
+
+
+class AdjustmentPayload(BaseModel):
+    parameters: dict = Field(default_factory=dict)
+    preset_id: Optional[str] = None
+    note: Optional[str] = None
+
+
+class TaskPreviewResponse(BaseModel):
+    preview_base64: str
+    metrics: dict
 

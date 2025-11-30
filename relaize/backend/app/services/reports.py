@@ -35,7 +35,7 @@ class ReportService:
         return ReportResponse(
             task_id=task.id,
             generated_at=datetime.utcnow(),
-            overview='水下图像修复评估报告（示例）',
+            overview='图像修复评估报告（示例）',
             sections=sections,
             recommendations=recommendations,
         )

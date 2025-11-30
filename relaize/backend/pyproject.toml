@@ -1,7 +1,7 @@
 [project]
 name = 'underwater-restore-backend'
 version = '0.1.0'
-description = 'FastAPI service for the 水下图像修复智能系统'
+description = 'FastAPI service for the 图像修复智能系统'
 authors = [
   { name = 'Codex', email = 'dev@example.com' }
 ]
@@ -19,6 +19,12 @@ dependencies = [
   'pillow>=10.4.0',
   'opencv-python-headless>=4.10.0.84',
   'numpy>=1.26.0',
+  'Final2x-core>=4.0.0',
+  'cccv==0.0.4',
+  'einops>=0.8.0',
+  'loguru>=0.7.0',
+  'torch>=2.0.0',
+  'torchvision>=0.15.0',
 ]
 
 [project.optional-dependencies]
@@ -30,4 +36,3 @@ dev = [
 [build-system]
 requires = ['setuptools>=65.0']
 build-backend = 'setuptools.build_meta'
-

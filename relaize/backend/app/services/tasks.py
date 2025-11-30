@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import UploadFile
 from redis import Redis
 
-from app.schemas.tasks import TaskDetail, TaskStatus, TaskSummary, TaskUpdate
+from app.schemas.tasks import AdjustmentPayload, TaskDetail, TaskStatus, TaskSummary, TaskUpdate
 
 
 class TaskService:
@@ -125,6 +125,24 @@ class TaskService:
         )
         self.redis.rpush(self.TASK_QUEUE_KEY, task.id)
         return self.get_task(task_id)
+
+    def apply_adjustments(self, task_id: str, payload: AdjustmentPayload) -> TaskDetail:
+        adjustments = {
+            "parameters": payload.parameters,
+            "preset_id": payload.preset_id,
+            "note": payload.note,
+            "saved_at": datetime.utcnow().isoformat(),
+        }
+        updated = self.update_task(
+            task_id,
+            TaskUpdate(
+                adjustments=adjustments,
+                status=TaskStatus.pending,
+                message=payload.note or "手动调参后重新排队",
+            ),
+        )
+        self.redis.rpush(self.TASK_QUEUE_KEY, task_id)
+        return updated
 
     def cancel_task(self, task_id: str) -> TaskDetail:
         return self.update_task(

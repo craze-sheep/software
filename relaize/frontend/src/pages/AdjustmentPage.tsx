@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { SliderControl } from "../components/ui/SliderControl";
 import { useAdjustmentStore } from "../store/adjustmentStore";
 import type { AdjustmentKey } from "../store/adjustmentStore";
-import { applyAdjustments, fetchTasks, resolveFileUrl } from "../lib/api";
-import type { AdjustmentPayload, TaskSummary } from "../types/tasks";
+import { applyAdjustments, fetchTaskDetail, fetchTaskPreview, fetchTasks, resolveFileUrl } from "../lib/api";
+import type { AdjustmentPayload, TaskDetail, TaskSummary } from "../types/tasks";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
 type PresetOption = {
-  id: "shallow" | "deep" | "turbid";
+  id: "night" | "haze" | "vintage" | "daily";
   label: string;
   icon: string;
   description: string;
@@ -19,53 +19,92 @@ type PresetOption = {
 
 const PRESET_OPTIONS: PresetOption[] = [
   {
-    id: "shallow",
-    label: "浅水场景",
-    icon: "📌",
-    description: "清澈浅水，侧重色温与适度对比。",
+    id: "night",
+    label: "夜景增强",
+    icon: "🌙",
+    description: "提升亮度动态范围，压制噪声并保留细节。",
     values: {
-      compensation: 55,
-      colorTemp: 8,
-      saturation: 115,
-      contrast: 1.4,
-      dehaze: 25,
-      denoise: 35,
+      compensation: 75,
+      colorTemp: 12,
+      saturation: 130,
+      contrast: 1.7,
+      sharpness: 55,
+      dehaze: 35,
+      denoise: 45,
       edgePreserve: 70,
     },
   },
   {
-    id: "deep",
-    label: "深水场景",
-    icon: "🌊",
-    description: "红光缺失明显，加强补偿与锐化。",
+    id: "haze",
+    label: "雾霾去除",
+    icon: "🌫️",
+    description: "强化对比度和去雾能力，恢复远景层次。",
     values: {
-      compensation: 85,
-      colorTemp: 28,
-      saturation: 130,
-      contrast: 2.2,
-      sharpness: 70,
-      dehaze: 60,
-      denoise: 45,
+      compensation: 65,
+      colorTemp: 6,
+      saturation: 115,
+      contrast: 1.8,
+      sharpness: 50,
+      dehaze: 80,
+      denoise: 40,
+      edgePreserve: 72,
     },
   },
   {
-    id: "turbid",
-    label: "浑浊水体",
-    icon: "💨",
-    description: "控制锐化，优先降噪与去雾。",
+    id: "vintage",
+    label: "老照片修复",
+    icon: "🧾",
+    description: "校正褪色并适度锐化，兼顾历史质感。",
     values: {
-      compensation: 65,
-      saturation: 105,
+      compensation: 80,
+      colorTemp: -8,
+      saturation: 125,
+      contrast: 1.6,
+      sharpness: 60,
+      dehaze: 40,
+      denoise: 60,
+      edgePreserve: 65,
+    },
+  },
+  {
+    id: "daily",
+    label: "日常美化",
+    icon: "✨",
+    description: "快速提亮与色彩增强，适合社交分享。",
+    values: {
+      compensation: 60,
+      colorTemp: 15,
+      saturation: 118,
       contrast: 1.3,
       sharpness: 40,
-      dehaze: 80,
-      denoise: 70,
-      edgePreserve: 80,
+      dehaze: 30,
+      denoise: 25,
+      edgePreserve: 68,
     },
   },
 ];
 
 const PRESET_STORAGE_KEY = "adjustment:lastPreset";
+type ModelOption = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+const MODEL_OPTIONS: ModelOption[] = [
+  { id: "RealESRGAN_RealESRGAN_x4plus_4x", label: "RealESRGAN 4x", description: "通用写实增强" },
+  { id: "HAT_Real_GAN_4x", label: "HAT Real 4x", description: "夜景/低光更佳" },
+  { id: "SwinIR_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_GAN_4x", label: "SwinIR 实景 4x", description: "雾霾与去雾场景" },
+  { id: "DAT_light_2x", label: "DAT 2x", description: "日常/轻量增强" },
+  { id: "RealCUGAN_Conservative_2x", label: "RealCUGAN 2x", description: "动画/插画" },
+];
+
+const PRESET_DEFAULT_MODELS: Record<PresetOption["id"], string> = {
+  night: "HAT_Real_GAN_4x",
+  haze: "SwinIR_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_GAN_4x",
+  vintage: "RealESRGAN_RealESRGAN_x4plus_4x",
+  daily: "DAT_light_2x",
+};
 
 const isPresetOptionId = (value: string | null | undefined): value is PresetOption["id"] =>
   Boolean(value && PRESET_OPTIONS.some((option) => option.id === value));
@@ -74,6 +113,7 @@ type StoredPreset = {
   parameters: Record<AdjustmentKey, number>;
   presetId: PresetOption["id"] | "custom";
   savedAt: string;
+  modelId?: string;
 };
 
 const loadStoredPreset = (): StoredPreset | null => {
@@ -100,12 +140,13 @@ const persistStoredPreset = (snapshot: StoredPreset) => {
 };
 
 export const AdjustmentPage = () => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { parameters, setParameter, setParameters, reset } = useAdjustmentStore();
-  const { data: tasks = [] } = useQuery<TaskSummary[]>({
+  const navigate = useNavigate();
+  const { parameters, setParameter: setParameterBase, setParameters, reset } = useAdjustmentStore();
+  const { data: tasks = [], isFetching: isFetchingTasks } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
+    refetchInterval: 8000,
   });
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -113,15 +154,65 @@ export const AdjustmentPage = () => {
   const [activePresetId, setActivePresetId] = useState<PresetOption["id"] | "custom">("custom");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
-  const selectedTask: TaskSummary | undefined =
-    tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
+  const [activeModelId, setActiveModelId] = useState<string>(MODEL_OPTIONS[0].id);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
+  const [lastSubmittedTaskId, setLastSubmittedTaskId] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewMetrics, setPreviewMetrics] =
+    useState<Record<string, { before: number; after: number; delta: number }> | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRequestRef = useRef(0);
+
+  useEffect(() => {
+    if (!tasks.length) return;
+    setSelectedTaskId((current) => {
+      if (current && tasks.some((task) => task.id === current)) {
+        return current;
+      }
+      return tasks[0].id;
+    });
+  }, [tasks]);
+
+  const { data: selectedTask, isFetching: isFetchingTaskDetail } = useQuery<TaskDetail>({
+    queryKey: ["task-detail", selectedTaskId],
+    queryFn: () => fetchTaskDetail(selectedTaskId as string),
+    enabled: Boolean(selectedTaskId),
+    refetchInterval: 5000,
+  });
+
   const beforeImage = resolveFileUrl(selectedTask?.source_url);
   const afterImage = resolveFileUrl(selectedTask?.preview_url);
+  const detailTitle = selectedTask?.filename ?? (isFetchingTaskDetail ? "加载中…" : "暂无任务");
+  const updatedAtText = selectedTask?.updated_at
+    ? new Date(selectedTask.updated_at).toLocaleString("zh-CN")
+    : "--";
+  const fileSizeText = selectedTask?.size ? `${(selectedTask.size / 1024 / 1024).toFixed(2)} MB` : "--";
+
   const isCustomMode = activePresetId === "custom";
   const currentModeLabel =
     activePresetId === "custom"
       ? "自定义"
       : PRESET_OPTIONS.find((option) => option.id === activePresetId)?.label ?? "预设";
+  const parameterSignature = useMemo(() => JSON.stringify(parameters), [parameters]);
+
+  const lastSnapshotKeyRef = useRef<string | null>(null);
+  const setParameterWithDirty = (key: AdjustmentKey, value: number) => {
+    setHasLocalChanges(true);
+    setParameterBase(key, value);
+  };
+
+  const handleModelChange = (modelId: string) => {
+    setActiveModelId(modelId);
+    setHasLocalChanges(true);
+  };
+
+  const handleResetParameters = () => {
+    reset();
+    setHasLocalChanges(false);
+    setActivePresetId("custom");
+    setActiveModelId(MODEL_OPTIONS[0].id);
+  };
 
   useEffect(() => {
     const presetFromStorage = loadStoredPreset();
@@ -130,15 +221,33 @@ export const AdjustmentPage = () => {
       if (snapshot) {
         setParameters(snapshot.parameters);
         setActivePresetId(snapshot.presetId);
+        if (snapshot.modelId) {
+          setActiveModelId(snapshot.modelId);
+        } else if (snapshot.presetId !== "custom" && PRESET_DEFAULT_MODELS[snapshot.presetId]) {
+          setActiveModelId(PRESET_DEFAULT_MODELS[snapshot.presetId]);
+        } else {
+          setActiveModelId(MODEL_OPTIONS[0].id);
+        }
       } else {
         setActivePresetId("custom");
+        setActiveModelId(MODEL_OPTIONS[0].id);
       }
+      setHasLocalChanges(false);
     };
 
     if (!selectedTask) {
-      applySnapshot(presetFromStorage);
+      if (lastSnapshotKeyRef.current !== "local") {
+        lastSnapshotKeyRef.current = "local";
+        applySnapshot(presetFromStorage);
+      }
       return;
     }
+
+    const snapshotKey = `${selectedTask.id}:${selectedTask.adjustments?.saved_at ?? "none"}`;
+    if (hasLocalChanges && lastSnapshotKeyRef.current === snapshotKey) {
+      return;
+    }
+    lastSnapshotKeyRef.current = snapshotKey;
 
     if (selectedTask.adjustments?.parameters) {
       applySnapshot({
@@ -147,12 +256,65 @@ export const AdjustmentPage = () => {
           ? (selectedTask.adjustments.preset_id as PresetOption["id"])
           : "custom",
         savedAt: selectedTask.adjustments.saved_at ?? new Date().toISOString(),
+        modelId:
+          "model_name" in selectedTask.adjustments && selectedTask.adjustments.model_name
+            ? (selectedTask.adjustments.model_name as string)
+            : undefined,
       });
       return;
     }
 
     applySnapshot(presetFromStorage);
-  }, [selectedTask?.id, selectedTask?.adjustments?.saved_at, reset, setParameters]);
+  }, [
+    selectedTask?.id,
+    selectedTask?.adjustments?.saved_at,
+    reset,
+    setParameters,
+    hasLocalChanges,
+  ]);
+
+  useEffect(() => {
+    if (!selectedTask?.id) {
+      setPreviewImage(null);
+      setPreviewMetrics(null);
+      return;
+    }
+
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+    }
+
+    setIsPreviewLoading(true);
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    previewTimerRef.current = setTimeout(async () => {
+      try {
+        const payload: AdjustmentPayload = {
+          parameters: { ...parameters },
+          preset_id: isCustomMode ? null : activePresetId,
+          model_name: activeModelId,
+        };
+        const response = await fetchTaskPreview(selectedTask.id, payload);
+        if (previewRequestRef.current !== requestId) return;
+        setPreviewImage(`data:image/jpeg;base64,${response.preview_base64}`);
+        setPreviewMetrics(response.metrics);
+      } catch (error) {
+        if (previewRequestRef.current !== requestId) return;
+        setPreviewImage(null);
+        setPreviewMetrics(null);
+      } finally {
+        if (previewRequestRef.current === requestId) {
+          setIsPreviewLoading(false);
+        }
+      }
+    }, 600);
+
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+      }
+    };
+  }, [selectedTask?.id, parameterSignature, activePresetId, isCustomMode, activeModelId]);
 
   const sliderConfigs = useMemo<
     {
@@ -227,20 +389,23 @@ export const AdjustmentPage = () => {
     [],
   );
 
-  const applyPreset = (presetId: PresetOption["id"]) => {
-    const preset = PRESET_OPTIONS.find((item) => item.id === presetId);
-    if (!preset) return;
-    setParameters(preset.values);
-    setActivePresetId(presetId);
-    setStatusMessage(`已应用「${preset.label}」预设，可继续微调后点击应用修复。`);
-    setErrorMessage(null);
-  };
+const applyPreset = (presetId: PresetOption["id"]) => {
+  const preset = PRESET_OPTIONS.find((item) => item.id === presetId);
+  if (!preset) return;
+  setParameters(preset.values);
+  setActivePresetId(presetId);
+  setActiveModelId(PRESET_DEFAULT_MODELS[presetId] ?? MODEL_OPTIONS[0].id);
+  setHasLocalChanges(false);
+  setStatusMessage(`已应用「${preset.label}」预设，可继续微调后点击应用修复。`);
+  setErrorMessage(null);
+};
 
   const handleSavePreset = () => {
     const snapshot: StoredPreset = {
       parameters: { ...parameters },
       presetId: activePresetId,
       savedAt: new Date().toISOString(),
+      modelId: activeModelId,
     };
     persistStoredPreset(snapshot);
     setStatusMessage("已保存当前参数组合，下次将默认加载。");
@@ -257,7 +422,10 @@ export const AdjustmentPage = () => {
     const payload: AdjustmentPayload = {
       parameters: { ...parameters },
       preset_id: isCustomMode ? null : activePresetId,
-      note: isCustomMode ? "自定义调参参数" : `使用预设「${currentModeLabel}」提交`,
+      model_name: activeModelId,
+      note: isCustomMode
+        ? `自定义参数（模型：${activeModelId}）`
+        : `使用预设「${currentModeLabel}」与模型 ${activeModelId} 提交`,
     };
     setIsApplying(true);
     setStatusMessage("正在提交参数并重新调度修复…");
@@ -268,8 +436,11 @@ export const AdjustmentPage = () => {
         parameters: { ...parameters },
         presetId: activePresetId,
         savedAt: new Date().toISOString(),
+        modelId: activeModelId,
       });
-      setStatusMessage(`「${taskName}」已提交新参数，任务已重新排队处理。`);
+      setStatusMessage(`「${taskName}」已提交新参数，系统正在重新处理，稍后可在效果对比页查看结果。`);
+      setLastSubmittedTaskId(taskId);
+      setHasLocalChanges(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tasks"] }),
         queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] }),
@@ -284,15 +455,11 @@ export const AdjustmentPage = () => {
 
   const handlePreview = () => setIsPreviewOpen(true);
 
-  const handleComparison = () => {
-    if (!selectedTask) return;
-    navigate("/comparison", { state: { taskId: selectedTask.id } });
-  };
-
   const handleCustomMode = () => {
     setActivePresetId("custom");
     setStatusMessage("已切换至自定义模式，可自由拖动滑块。");
     setErrorMessage(null);
+    setHasLocalChanges(true);
   };
 
   return (
@@ -301,24 +468,24 @@ export const AdjustmentPage = () => {
         <div className="flex flex-col gap-3 rounded-3xl bg-white/90 p-5 shadow-card md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-slate-500">选择需要调参的任务</p>
-            <h2 className="text-2xl font-semibold text-slate-800">{selectedTask?.filename ?? "暂无任务"}</h2>
+            <h2 className="text-2xl font-semibold text-slate-800">{detailTitle}</h2>
           </div>
           <div className="w-full max-w-md md:w-96">
             <select
               className="w-full truncate rounded-full border border-slate-200 px-5 py-2.5 text-base text-slate-700"
-              value={selectedTask?.id ?? ""}
+              value={selectedTaskId ?? ""}
               onChange={(event) => setSelectedTaskId(event.target.value)}
-              disabled={!tasks.length}
+              disabled={!tasks.length || isFetchingTasks}
             >
-            {!tasks.length ? (
-              <option value="">暂无任务</option>
-            ) : (
-              tasks.map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.filename} · {task.status}
-                </option>
-              ))
-            )}
+              {!tasks.length ? (
+                <option value="">暂无任务</option>
+              ) : (
+                tasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.filename} · {task.status}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>
@@ -348,6 +515,47 @@ export const AdjustmentPage = () => {
           </div>
         </section>
 
+        <section className="rounded-3xl bg-white/90 p-5 shadow-card">
+          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-800">实时预览</h2>
+              <p className="text-sm text-slate-500">基于当前参数的低分辨率模拟效果</p>
+            </div>
+            <span className="text-sm text-slate-500">
+              {isPreviewLoading ? "计算中…" : hasLocalChanges ? "草稿" : "最新"}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_220px]">
+            <div className="flex h-72 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50">
+              {previewImage ? (
+                <img src={previewImage} alt="实时预览" className="h-full w-full rounded-2xl object-contain" />
+              ) : (
+                <p className="text-sm text-slate-400">
+                  {isPreviewLoading ? "生成预览中…" : "暂无预览，可调节参数试试"}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2 text-sm text-slate-600">
+              {previewMetrics ? (
+                Object.entries(previewMetrics).map(([name, metric]) => (
+                  <div key={name} className="rounded-xl border border-slate-100 p-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-400">{name.toUpperCase()}</p>
+                    <p className="text-base font-semibold text-slate-900">
+                      {metric.after.toFixed(2)}{" "}
+                      <span className="text-xs text-slate-500">
+                        ({metric.before.toFixed(2)} → {metric.after.toFixed(2)})
+                      </span>
+                    </p>
+                    <p className="text-xs text-slate-500">Δ {metric.delta.toFixed(2)}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400">{isPreviewLoading ? "加载指标…" : "暂无指标"}</p>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section className="space-y-5 rounded-3xl bg-white/90 p-5 shadow-card">
           <header className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -373,7 +581,7 @@ export const AdjustmentPage = () => {
                 step={config.step}
                 description={config.description}
                 formatValue={config.formatValue}
-                onValueChange={(value) => setParameter(config.key, value)}
+                onValueChange={(value) => setParameterWithDirty(config.key, value)}
                 disabled={!isCustomMode}
               />
             ))}
@@ -403,7 +611,10 @@ export const AdjustmentPage = () => {
             >
               🎨 自定义
             </button>
-            <button className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 whitespace-nowrap" onClick={reset}>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 whitespace-nowrap"
+              onClick={handleResetParameters}
+            >
               ↻ 重置参数
             </button>
             <button
@@ -416,63 +627,112 @@ export const AdjustmentPage = () => {
         </section>
       </div>
 
-      <aside className="flex h-full flex-col gap-5 rounded-3xl bg-white/90 p-5 shadow-card">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-800">📊 图像信息</h3>
-          <dl className="mt-4 space-y-3 text-sm text-slate-500">
-            <div className="flex justify-between">
-              <dt>文件名</dt>
-              <dd className="font-semibold text-slate-700">{selectedTask?.filename ?? "--"}</dd>
+      <aside className="rounded-3xl bg-white/95 p-6 shadow-card">
+        <div className="space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">图像信息</p>
+              <h3 className="mt-2 truncate text-xl font-semibold text-slate-900" title={detailTitle}>
+                {detailTitle}
+              </h3>
+              <p className="mt-1 truncate text-xs text-slate-500">ID：{selectedTask?.id ?? "--"}</p>
             </div>
-            <div className="flex justify-between">
-              <dt>大小</dt>
-              <dd className="font-semibold text-slate-700">
-                {selectedTask?.size ? `${(selectedTask.size / 1024 / 1024).toFixed(2)} MB` : "--"}
+            <div className="shrink-0 text-right text-xs text-slate-500">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">状态</p>
+              <div className="mt-2">
+                {selectedTask?.status ? (
+                  <StatusBadge status={selectedTask.status} size="sm" />
+                ) : isFetchingTaskDetail ? (
+                  <span className="text-[11px] text-slate-400">同步中…</span>
+                ) : (
+                  "--"
+                )}
+              </div>
+            </div>
+          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-400">文件大小</dt>
+              <dd className="font-semibold text-slate-700">{fileSizeText}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-400">更新时间</dt>
+              <dd className="font-semibold text-slate-700">{updatedAtText}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-400">原图链接</dt>
+              <dd className="truncate text-indigo-500">
+                {beforeImage ? (
+                  <a href={beforeImage} target="_blank" rel="noreferrer">
+                    查看
+                  </a>
+                ) : (
+                  "--"
+                )}
               </dd>
             </div>
-            <div className="flex justify-between">
-              <dt>状态</dt>
-              <dd className="font-semibold text-slate-700">
-                {selectedTask?.status ? <StatusBadge status={selectedTask.status} size="sm" /> : "--"}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>更新时间</dt>
-              <dd className="font-semibold text-slate-700">
-                {selectedTask?.updated_at ? new Date(selectedTask.updated_at).toLocaleString("zh-CN") : "--"}
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-slate-400">修复结果</dt>
+              <dd className="truncate text-indigo-500">
+                {afterImage ? (
+                  <a href={afterImage} target="_blank" rel="noreferrer">
+                    查看
+                  </a>
+                ) : (
+                  "待生成"
+                )}
               </dd>
             </div>
           </dl>
-        </div>
-        <div className="space-y-3">
-          <button
-            className="w-full rounded-full bg-gradient-to-r from-brand-primary to-brand-secondary px-4 py-3 font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-70"
-            onClick={handleApply}
-            disabled={isApplying}
-          >
-            {isApplying ? "提交中…" : "✓ 应用修复"}
-          </button>
-          <button
-            className="w-full rounded-full border border-slate-200 px-4 py-3 font-semibold text-slate-600"
-            onClick={handlePreview}
-            disabled={!beforeImage && !afterImage}
-          >
-            👁️ 全屏预览
-          </button>
-          <button
-            className="w-full rounded-full border border-slate-200 px-4 py-3 font-semibold text-slate-600"
-            onClick={handleComparison}
-            disabled={!selectedTask}
-          >
-            📋 对比详情
-          </button>
-        </div>
-        <div className="space-y-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-          <p>• 对于浑浊水体，适当增加去雾强度。</p>
-          <p>• 避免过度锐化导致伪影，可结合局部预览观察。</p>
-          <p>• 保存参数组合，便于批量任务快速调用。</p>
-          {statusMessage ? <p className="text-brand-secondary">{statusMessage}</p> : null}
-          {errorMessage ? <p className="text-rose-500">{errorMessage}</p> : null}
+          <div className="rounded-2xl border border-slate-100 bg-white/80 p-4">
+            <p className="text-sm font-semibold text-slate-700">AI 模型</p>
+            <p className="text-xs text-slate-500">选择用于 Final2x 超分的模型</p>
+            <select
+              className="mt-3 w-full rounded-full border border-slate-200 px-4 py-2 text-base text-slate-700"
+              value={activeModelId}
+              onChange={(event) => handleModelChange(event.target.value)}
+            >
+              {MODEL_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label} · {option.description}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-4">
+            <button
+              className="w-full rounded-3xl bg-gradient-to-b from-brand-primary to-brand-secondary px-4 py-4 text-xl font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={handleApply}
+              disabled={isApplying}
+            >
+              应用修复
+            </button>
+            <button
+              className="w-full rounded-3xl border border-slate-100 bg-white px-4 py-4 text-xl font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handlePreview}
+              disabled={!beforeImage && !afterImage}
+            >
+              全屏预览
+            </button>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">调参建议</p>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600 leading-relaxed">
+              <li>夜景/低光场景建议提升补偿和亮度，同时保持 40~50% 去噪。</li>
+              <li>雾霾/去雾场景可将“去雾强度”提升到 70 以上，并适度调高饱和度。</li>
+              <li>保存参数组合，便于多任务或批量调度时快速复用。</li>
+            </ul>
+            {statusMessage ? <p className="mt-3 text-sm text-brand-secondary">{statusMessage}</p> : null}
+            {errorMessage ? <p className="mt-1 text-sm text-rose-500">{errorMessage}</p> : null}
+            {lastSubmittedTaskId ? (
+              <button
+                className="mt-4 w-full rounded-full border border-brand-primary/30 px-4 py-2 text-sm font-semibold text-brand-primary hover:bg-brand-primary/10"
+                onClick={() => navigate(`/comparison?taskId=${lastSubmittedTaskId}`)}
+              >
+                前往效果对比
+              </button>
+            ) : null}
+          </div>
         </div>
       </aside>
 

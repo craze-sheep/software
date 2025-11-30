@@ -4,8 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import FileResponse
 
 from app.api.dependencies import get_task_service
-from app.schemas.tasks import TaskDetail, TaskStatus, TaskSummary, TaskUpdate
+from app.schemas.tasks import (
+    AdjustmentPayload,
+    TaskDetail,
+    TaskPreviewResponse,
+    TaskStatus,
+    TaskSummary,
+    TaskUpdate,
+)
 from app.services.tasks import TaskService
+from app.services.processor import generate_preview_image
 
 router = APIRouter(tags=["Tasks"])
 
@@ -86,6 +94,18 @@ def reprocess_task(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
 
 
+@router.post("/{task_id}/adjust", response_model=TaskDetail)
+def adjust_task(
+    payload: AdjustmentPayload,
+    task_id: str,
+    task_service: TaskService = Depends(get_task_service),
+) -> TaskDetail:
+    try:
+        return task_service.apply_adjustments(task_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+
+
 @router.post("/{task_id}/cancel", response_model=TaskDetail)
 def cancel_task(
     task_id: str,
@@ -95,3 +115,30 @@ def cancel_task(
         return task_service.cancel_task(task_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+
+
+@router.post("/{task_id}/preview-adjust", response_model=TaskPreviewResponse)
+def preview_adjustments(
+    payload: AdjustmentPayload | None,
+    task_id: str,
+    task_service: TaskService = Depends(get_task_service),
+) -> TaskPreviewResponse:
+    try:
+        task = task_service.get_task(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found") from exc
+
+    parameters = (
+        (payload.parameters if payload else None)
+        or (task.adjustments.get("parameters") if task.adjustments else None)
+        or {}
+    )
+    preset_id = (
+        (payload.preset_id if payload else None)
+        or (task.adjustments.get("preset_id") if task.adjustments else None)
+    )
+
+    adjustments = {"parameters": parameters, "preset_id": preset_id}
+
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+    return TaskPreviewResponse(**preview)
