@@ -7,6 +7,7 @@ export type AdjustmentParameters = Partial<Record<AdjustmentKey, number>>;
 export type AdjustmentPayload = {
   preset_id?: string | null;
   model_name?: string | null;
+  target_scale?: number | null;
   parameters: AdjustmentParameters;
   note?: string | null;
   saved_at?: string | null;

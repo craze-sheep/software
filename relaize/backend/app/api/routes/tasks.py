@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path as FilePath
+import traceback
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import FileResponse
 
@@ -16,6 +20,7 @@ from app.services.tasks import TaskService
 from app.services.processor import generate_preview_image
 
 router = APIRouter(tags=["Tasks"])
+PREVIEW_ERROR_LOG = FilePath(__file__).resolve().parents[3] / "preview-errors.log"
 
 
 @router.get("", response_model=list[TaskSummary])
@@ -137,8 +142,30 @@ def preview_adjustments(
         (payload.preset_id if payload else None)
         or (task.adjustments.get("preset_id") if task.adjustments else None)
     )
+    model_name = (
+        (payload.model_name if payload else None)
+        or (task.adjustments.get("model_name") if task.adjustments else None)
+    )
+    target_scale = (
+        (payload.target_scale if payload else None)
+        or (task.adjustments.get("target_scale") if task.adjustments else None)
+    )
 
-    adjustments = {"parameters": parameters, "preset_id": preset_id}
+    adjustments = {
+        "parameters": parameters,
+        "preset_id": preset_id,
+        "model_name": model_name,
+        "target_scale": target_scale,
+    }
 
-    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+    try:
+        preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+    except Exception as exc:  # pragma: no cover - diagnostic guard
+        with PREVIEW_ERROR_LOG.open("a", encoding="utf-8") as log:
+            log.write(
+                f"[{datetime.now().isoformat()}] preview-adjust failed for task {task_id}: {exc}\n"
+            )
+            traceback.print_exc(file=log)
+            log.write("\n")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="预览生成失败") from exc
     return TaskPreviewResponse(**preview)

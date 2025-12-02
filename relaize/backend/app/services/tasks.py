@@ -128,8 +128,10 @@ class TaskService:
 
     def apply_adjustments(self, task_id: str, payload: AdjustmentPayload) -> TaskDetail:
         adjustments = {
-            "parameters": payload.parameters,
+            "parameters": payload.parameters or {},
             "preset_id": payload.preset_id,
+            "model_name": payload.model_name,
+            "target_scale": payload.target_scale,
             "note": payload.note,
             "saved_at": datetime.utcnow().isoformat(),
         }

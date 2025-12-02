@@ -56,9 +56,10 @@ class AdjustmentPayload(BaseModel):
     parameters: dict = Field(default_factory=dict)
     preset_id: Optional[str] = None
     note: Optional[str] = None
+    model_name: Optional[str] = None
+    target_scale: Optional[float] = Field(default=None, ge=0.1, le=8.0)
 
 
 class TaskPreviewResponse(BaseModel):
     preview_base64: str
     metrics: dict
-

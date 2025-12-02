@@ -106,6 +106,36 @@ const PRESET_DEFAULT_MODELS: Record<PresetOption["id"], string> = {
   daily: "DAT_light_2x",
 };
 
+const clampValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const buildLocalPreviewFilter = (params: Record<AdjustmentKey, number>): string => {
+  const compensation = params.compensation ?? 60;
+  const colorTemp = params.colorTemp ?? 0;
+  const saturation = params.saturation ?? 100;
+  const sharpness = params.sharpness ?? 55;
+  const dehaze = params.dehaze ?? 55;
+  const denoise = params.denoise ?? 45;
+  const edgePreserve = params.edgePreserve ?? 70;
+  const bright = clampValue(0.85 + (compensation - 60) / 120, 0.65, 1.6);
+  const contrast = clampValue(params.contrast ?? 1.2, 0.6, 3);
+  const saturate = clampValue(saturation / 100, 0.4, 2.6);
+  const hueShift = clampValue(colorTemp * 0.8, -40, 40);
+  const sepia = clampValue((dehaze - denoise) / 400, 0, 0.25);
+  const blurPx = clampValue((40 - sharpness) / 120, 0, 1);
+  const dropShadow = clampValue((edgePreserve - 50) / 220, 0, 0.35);
+  return [
+    `brightness(${bright})`,
+    `contrast(${contrast})`,
+    `saturate(${saturate})`,
+    `hue-rotate(${hueShift}deg)`,
+    `sepia(${sepia})`,
+    `blur(${blurPx}px)`,
+    dropShadow > 0 ? `drop-shadow(0 0 ${dropShadow}rem rgba(16,24,40,0.35))` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
 const isPresetOptionId = (value: string | null | undefined): value is PresetOption["id"] =>
   Boolean(value && PRESET_OPTIONS.some((option) => option.id === value));
 
@@ -158,8 +188,6 @@ export const AdjustmentPage = () => {
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [lastSubmittedTaskId, setLastSubmittedTaskId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewMetrics, setPreviewMetrics] =
-    useState<Record<string, { before: number; after: number; delta: number }> | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewRequestRef = useRef(0);
@@ -195,9 +223,32 @@ export const AdjustmentPage = () => {
       ? "自定义"
       : PRESET_OPTIONS.find((option) => option.id === activePresetId)?.label ?? "预设";
   const parameterSignature = useMemo(() => JSON.stringify(parameters), [parameters]);
+  const localPreviewFilter = useMemo(() => buildLocalPreviewFilter(parameters), [parameterSignature]);
+  const shouldUseLocalPreview =
+    Boolean(beforeImage) && !previewImage && (hasLocalChanges || !afterImage || isPreviewLoading);
+  const previewOrResultImage = previewImage ?? afterImage ?? (shouldUseLocalPreview ? beforeImage : null);
+  const isPreviewActive = Boolean(previewImage || shouldUseLocalPreview);
+  const previewBadgeText = previewImage
+    ? isPreviewLoading
+      ? "预览生成中…"
+      : hasLocalChanges
+        ? "草稿预览"
+        : "预览最新"
+    : shouldUseLocalPreview
+      ? "本地即时预览"
+      : "预览最新";
 
   const lastSnapshotKeyRef = useRef<string | null>(null);
+  const ensureCustomMode = () => {
+    if (activePresetId !== "custom") {
+      setActivePresetId("custom");
+      setStatusMessage("已切换至自定义模式，可自由拖动滑块。");
+      setErrorMessage(null);
+    }
+  };
+
   const setParameterWithDirty = (key: AdjustmentKey, value: number) => {
+    ensureCustomMode();
     setHasLocalChanges(true);
     setParameterBase(key, value);
   };
@@ -276,7 +327,6 @@ export const AdjustmentPage = () => {
   useEffect(() => {
     if (!selectedTask?.id) {
       setPreviewImage(null);
-      setPreviewMetrics(null);
       return;
     }
 
@@ -297,11 +347,9 @@ export const AdjustmentPage = () => {
         const response = await fetchTaskPreview(selectedTask.id, payload);
         if (previewRequestRef.current !== requestId) return;
         setPreviewImage(`data:image/jpeg;base64,${response.preview_base64}`);
-        setPreviewMetrics(response.metrics);
       } catch (error) {
         if (previewRequestRef.current !== requestId) return;
         setPreviewImage(null);
-        setPreviewMetrics(null);
       } finally {
         if (previewRequestRef.current === requestId) {
           setIsPreviewLoading(false);
@@ -503,56 +551,29 @@ const applyPreset = (presetId: PresetOption["id"]) => {
           </div>
           <div className="relative overflow-hidden rounded-2xl bg-slate-100">
             <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white">
-              修复后图像
+              {isPreviewActive ? "调参预览" : "修复后图像"}
             </div>
-            {afterImage ? (
-              <img src={afterImage} alt="修复后图像" className="h-full w-full object-contain bg-black" />
+            {isPreviewActive ? (
+              <div className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600">
+                {previewBadgeText}
+              </div>
+            ) : null}
+            {previewOrResultImage ? (
+              <img
+                src={previewOrResultImage}
+                alt={isPreviewActive ? "调参预览" : "修复后图像"}
+                className="h-full w-full object-contain bg-black"
+                style={shouldUseLocalPreview ? { filter: localPreviewFilter } : undefined}
+              />
             ) : (
               <div className="flex h-64 items-center justify-center text-slate-400">
-                处理未完成，等待 worker 输出
+                {isPreviewActive
+                  ? isPreviewLoading
+                    ? "生成预览中…"
+                    : "暂无预览，可调节参数试试"
+                  : "处理未完成，等待 worker 输出"}
               </div>
             )}
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white/90 p-5 shadow-card">
-          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-800">实时预览</h2>
-              <p className="text-sm text-slate-500">基于当前参数的低分辨率模拟效果</p>
-            </div>
-            <span className="text-sm text-slate-500">
-              {isPreviewLoading ? "计算中…" : hasLocalChanges ? "草稿" : "最新"}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_220px]">
-            <div className="flex h-72 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50">
-              {previewImage ? (
-                <img src={previewImage} alt="实时预览" className="h-full w-full rounded-2xl object-contain" />
-              ) : (
-                <p className="text-sm text-slate-400">
-                  {isPreviewLoading ? "生成预览中…" : "暂无预览，可调节参数试试"}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2 text-sm text-slate-600">
-              {previewMetrics ? (
-                Object.entries(previewMetrics).map(([name, metric]) => (
-                  <div key={name} className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">{name.toUpperCase()}</p>
-                    <p className="text-base font-semibold text-slate-900">
-                      {metric.after.toFixed(2)}{" "}
-                      <span className="text-xs text-slate-500">
-                        ({metric.before.toFixed(2)} → {metric.after.toFixed(2)})
-                      </span>
-                    </p>
-                    <p className="text-xs text-slate-500">Δ {metric.delta.toFixed(2)}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-slate-400">{isPreviewLoading ? "加载指标…" : "暂无指标"}</p>
-              )}
-            </div>
           </div>
         </section>
 
@@ -582,7 +603,6 @@ const applyPreset = (presetId: PresetOption["id"]) => {
                 description={config.description}
                 formatValue={config.formatValue}
                 onValueChange={(value) => setParameterWithDirty(config.key, value)}
-                disabled={!isCustomMode}
               />
             ))}
           </div>
@@ -740,7 +760,9 @@ const applyPreset = (presetId: PresetOption["id"]) => {
         open={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
         beforeImage={beforeImage}
-        afterImage={afterImage}
+        afterImage={previewOrResultImage}
+        isPreviewActive={isPreviewActive}
+        previewFilter={shouldUseLocalPreview ? localPreviewFilter : undefined}
       />
     </div>
   );
@@ -751,10 +773,13 @@ type PreviewModalProps = {
   onClose: () => void;
   beforeImage?: string | null;
   afterImage?: string | null;
+  isPreviewActive?: boolean;
+  previewFilter?: string;
 };
 
-const PreviewModal = ({ open, onClose, beforeImage, afterImage }: PreviewModalProps) => {
+const PreviewModal = ({ open, onClose, beforeImage, afterImage, isPreviewActive, previewFilter }: PreviewModalProps) => {
   if (!open) return null;
+  const afterLabel = isPreviewActive ? "调参预览" : "修复后图像";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
       <div className="w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl">
@@ -776,12 +801,17 @@ const PreviewModal = ({ open, onClose, beforeImage, afterImage }: PreviewModalPr
             )}
           </div>
           <div>
-            <p className="mb-2 text-sm font-semibold text-slate-600">修复后图像</p>
+            <p className="mb-2 text-sm font-semibold text-slate-600">{afterLabel}</p>
             {afterImage ? (
-              <img src={afterImage} alt="修复后图像" className="h-96 w-full rounded-2xl object-contain bg-black" />
+              <img
+                src={afterImage}
+                alt={afterLabel}
+                className="h-96 w-full rounded-2xl object-contain bg-black"
+                style={isPreviewActive && previewFilter ? { filter: previewFilter } : undefined}
+              />
             ) : (
               <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                处理结果稍后生成
+                {isPreviewActive ? "生成预览中…" : "处理结果稍后生成"}
               </div>
             )}
           </div>

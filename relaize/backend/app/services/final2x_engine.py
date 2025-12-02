@@ -6,6 +6,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import torch
 from cccv import AutoModel, ConfigType
 from Final2x_core.util.device import get_device
 from loguru import logger
@@ -33,15 +34,27 @@ class Final2xEngine:
         )
 
         pretrained_name = self._resolve_model_name(config.model_name)
-        logger.info("Loading Final2x model: %s (tile=%s)", pretrained_name, tile)
+        effective_device = self._select_device(config.device)
+        logger.info("Loading Final2x model: %s (tile=%s) on %s", pretrained_name, tile, effective_device)
         self._model = AutoModel.from_pretrained(
             pretrained_name,
-            device=get_device(config.device),
+            device=get_device(effective_device),
             fp16=False,
             tile=tile,
             gh_proxy=config.gh_proxy,
         )
         logger.info("Final2x engine ready on %s", self._model.device)
+
+    @staticmethod
+    def _select_device(requested: str) -> str:
+        if requested and requested.lower().startswith("cuda"):
+            if not torch.cuda.is_available():
+                logger.warning(
+                    "CUDA device '%s' requested but torch.cuda.is_available() is False, falling back to CPU",
+                    requested,
+                )
+                return "cpu"
+        return requested or "cpu"
 
     @staticmethod
     def _resolve_model_name(name: str) -> ConfigType | str:
@@ -59,9 +72,32 @@ class Final2xEngine:
         :param image_bgr: input image in BGR color space.
         :param target_scale: override default scale factor.
         """
-        result = self._model.inference_image(image_bgr)
+        pad_unit = 16
+        height, width = image_bgr.shape[:2]
+        pad_h = (pad_unit - height % pad_unit) % pad_unit
+        pad_w = (pad_unit - width % pad_unit) % pad_unit
+        if pad_h or pad_w:
+            padded = cv2.copyMakeBorder(
+                image_bgr,
+                0,
+                pad_h,
+                0,
+                pad_w,
+                borderType=cv2.BORDER_REFLECT_101,
+            )
+        else:
+            padded = image_bgr
+
+        result = self._model.inference_image(padded)
         if result is None:
             raise RuntimeError("Final2x inference returned empty output")
+
+        if pad_h or pad_w:
+            scale_h = result.shape[0] / padded.shape[0]
+            scale_w = result.shape[1] / padded.shape[1]
+            crop_h = result.shape[0] - int(round(pad_h * scale_h))
+            crop_w = result.shape[1] - int(round(pad_w * scale_w))
+            result = result[:crop_h, :crop_w]
 
         scale = target_scale or self.config.target_scale
         if scale and scale > 0:

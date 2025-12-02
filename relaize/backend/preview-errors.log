@@ -1,0 +1,334 @@
+[2025-12-03T01:46:21.469002] preview-adjust failed for task f52459c7-5c93-4f55-b424-c46853e6e55d: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:23.979258] preview-adjust failed for task f52459c7-5c93-4f55-b424-c46853e6e55d: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:24.972740] preview-adjust failed for task f52459c7-5c93-4f55-b424-c46853e6e55d: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:25.848974] preview-adjust failed for task f52459c7-5c93-4f55-b424-c46853e6e55d: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:28.501886] preview-adjust failed for task 8d89394e-f137-4549-8de4-ab51c6edbfbc: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:31.782938] preview-adjust failed for task 95e9a173-dedf-4d3b-b197-0c234f25ad41: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:34.058729] preview-adjust failed for task 979c279c-b92e-4607-8527-12e4b7b18815: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:36.142962] preview-adjust failed for task 59f3231d-6816-4ca0-a17e-b4c576c0b433: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:42.602678] preview-adjust failed for task 59f3231d-6816-4ca0-a17e-b4c576c0b433: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:46:43.897500] preview-adjust failed for task 59f3231d-6816-4ca0-a17e-b4c576c0b433: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 44, in inference_image
+    img = transforms.ToTensor()(img).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: out of memory
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+
+[2025-12-03T01:54:10.883769] preview-adjust failed for task 8d89394e-f137-4549-8de4-ab51c6edbfbc: CUDA out of memory. Tried to allocate 5.27 GiB. GPU 0 has a total capacity of 8.00 GiB of which 0 bytes is free. Of the allocated memory 10.34 GiB is allocated by PyTorch, and 952.33 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "D:\project\software\relaize\backend\app\api\routes\tasks.py", line 162, in preview_adjustments
+    preview = generate_preview_image(task_service.get_source_path(task), adjustments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\processor.py", line 182, in generate_preview_image
+    base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\project\software\relaize\backend\app\services\final2x_engine.py", line 91, in process
+    result = self._model.inference_image(padded)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 48, in inference_image
+    img = self.inference(img)
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\model\sr_base_model.py", line 22, in inference
+    return self.model(img)
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\arch\sr\hat_arch.py", line 298, in forward
+    x = self.conv_after_body(self.forward_features(x)) + x
+                             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\arch\sr\hat_arch.py", line 284, in forward_features
+    x = layer(x, x_size, params)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\arch\sr\hat_arch.py", line 963, in forward
+    return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size, params), x_size))) + x
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\arch\sr\hat_arch.py", line 862, in forward
+    x = self.overlap_attn(x, x_size, params["rpi_oca"])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\torch\nn\modules\module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\lzy\anaconda3\envs\relaize_env\Lib\site-packages\cccv\arch\sr\hat_arch.py", line 753, in forward
+    attn = attn + relative_position_bias.unsqueeze(0)
+           ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 5.27 GiB. GPU 0 has a total capacity of 8.00 GiB of which 0 bytes is free. Of the allocated memory 10.34 GiB is allocated by PyTorch, and 952.33 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+
