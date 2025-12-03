@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 import cv2
 import numpy as np
+
+# Setting the allocator hint up-front helps PyTorch reuse memory segments on 8GB GPUs.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import torch
 from cccv import AutoModel, ConfigType
 from Final2x_core.util.device import get_device
@@ -27,30 +33,25 @@ class Final2xEngineConfig:
 class Final2xEngine:
     """Thin wrapper around Final2x-core AutoModel with simple caching."""
 
+    FALLBACK_TILE_SIZES: tuple[int, ...] = (512, 384, 320, 288, 256, 224, 192, 160, 144, 128, 112, 96, 80, 72, 64)
+
     def __init__(self, config: Final2xEngineConfig):
         self.config = config
-        tile: tuple[int, int] | None = (
-            (config.tile_size, config.tile_size) if config.use_tile and config.tile_size > 0 else None
-        )
-
-        pretrained_name = self._resolve_model_name(config.model_name)
-        effective_device = self._select_device(config.device)
-        logger.info("Loading Final2x model: %s (tile=%s) on %s", pretrained_name, tile, effective_device)
-        self._model = AutoModel.from_pretrained(
-            pretrained_name,
-            device=get_device(effective_device),
-            fp16=False,
-            tile=tile,
-            gh_proxy=config.gh_proxy,
-        )
-        logger.info("Final2x engine ready on %s", self._model.device)
+        self._lock = threading.Lock()
+        self._requested_device = self._select_device(config.device)
+        self._pretrained_name = self._resolve_model_name(config.model_name)
+        initial_tile = config.tile_size if config.use_tile and config.tile_size > 0 else None
+        self._current_tile_size: int | None = initial_tile
+        self._effective_device = self._requested_device
+        self._model = None
+        self._load_model(initial_tile, device_label=self._requested_device)
 
     @staticmethod
     def _select_device(requested: str) -> str:
         if requested and requested.lower().startswith("cuda"):
             if not torch.cuda.is_available():
                 logger.warning(
-                    "CUDA device '%s' requested but torch.cuda.is_available() is False, falling back to CPU",
+                    "CUDA device '{}' requested but torch.cuda.is_available() is False, falling back to CPU",
                     requested,
                 )
                 return "cpu"
@@ -88,7 +89,8 @@ class Final2xEngine:
         else:
             padded = image_bgr
 
-        result = self._model.inference_image(padded)
+        with self._lock:
+            result = self._run_inference_with_retry(padded)
         if result is None:
             raise RuntimeError("Final2x inference returned empty output")
 
@@ -106,6 +108,84 @@ class Final2xEngine:
             if current_size != target_size:
                 result = cv2.resize(result, target_size, interpolation=cv2.INTER_LINEAR)
         return result
+
+    def _load_model(self, tile_size: int | None, *, device_label: str | None = None) -> None:
+        """Instantiate AutoModel with the requested tiling/device settings."""
+        device_label = device_label or self._requested_device
+        tile = (tile_size, tile_size) if tile_size else None
+        logger.info(
+            "Loading Final2x model: {} (tile={}) on {}",
+            self._pretrained_name,
+            f"{tile_size}px" if tile_size else "disabled",
+            device_label,
+        )
+        self._model = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        model = AutoModel.from_pretrained(
+            self._pretrained_name,
+            device=get_device(device_label),
+            fp16=False,
+            tile=tile,
+            gh_proxy=self.config.gh_proxy,
+        )
+        self._model = model
+        self._effective_device = str(model.device)
+        self._current_tile_size = tile_size
+        logger.info("Final2x engine ready on {} (tile={})", self._model.device, tile)
+
+    def _run_inference_with_retry(self, image: np.ndarray) -> np.ndarray:
+        """Run inference and automatically retry on CUDA OOM with smaller tiles or CPU."""
+        try:
+            return self._model.inference_image(image)
+        except torch.cuda.OutOfMemoryError as exc:  # pragma: no cover - depends on GPU memory
+            logger.warning("Final2x CUDA OOM detected: {}", exc)
+            return self._recover_from_oom(image, exc)
+        except RuntimeError as exc:  # pragma: no cover - defensive handling
+            if "CUDA out of memory" not in str(exc):
+                raise
+            logger.warning("Final2x runtime OOM detected: {}", exc)
+            return self._recover_from_oom(image, exc)
+
+    def _recover_from_oom(self, image: np.ndarray, original_exc: Exception) -> np.ndarray:
+        """Fallback to progressively smaller tiles, then CPU if needed."""
+        for tile_size in self._fallback_tile_sizes():
+            try:
+                self._load_model(tile_size, device_label=self._requested_device)
+                logger.info("Retrying Final2x inference with {}px tiles", tile_size)
+                return self._model.inference_image(image)
+            except torch.cuda.OutOfMemoryError as exc:  # pragma: no cover - depends on GPU memory
+                logger.warning("Tile {}px still OOM ({}), trying smaller tile", tile_size, exc)
+                continue
+            except RuntimeError as exc:
+                if "CUDA out of memory" in str(exc):
+                    logger.warning("Tile {}px runtime OOM ({}), trying smaller tile", tile_size, exc)
+                    continue
+                raise
+
+        if self._effective_device.startswith("cuda"):
+            logger.warning("Exhausted GPU tiles, reloading Final2x model on CPU as a fallback")
+            self._load_model(None, device_label="cpu")
+            return self._model.inference_image(image)
+        raise original_exc
+
+    def _fallback_tile_sizes(self) -> list[int]:
+        """Return descending tile sizes smaller than the current tile."""
+        if self._current_tile_size:
+            max_tile = self._current_tile_size
+        else:
+            max_tile = max(self.FALLBACK_TILE_SIZES) + 1
+
+        candidates: list[int] = []
+        if not self._current_tile_size and self.config.tile_size > 0:
+            candidates.append(self.config.tile_size)
+
+        for size in self.FALLBACK_TILE_SIZES:
+            if size >= max_tile:
+                continue
+            if size not in candidates:
+                candidates.append(size)
+        return candidates
 
 
 @lru_cache(maxsize=8)

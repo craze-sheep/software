@@ -159,23 +159,17 @@ def enhance_image(
 def generate_preview_image(
     source: Path,
     adjustments: Optional[Mapping[str, MutableMapping]] = None,
-    max_dimension: int = 640,
 ) -> Dict[str, Any]:
     original_bgr = cv2.imread(str(source))
     if original_bgr is None:
         raise ValueError(f"Unable to read image {source}")
 
-    height, width = original_bgr.shape[:2]
-    scale = min(1.0, max_dimension / float(max(height, width)))
-    if scale < 1.0:
-        new_size = (int(width * scale), int(height * scale))
-        original_bgr = cv2.resize(original_bgr, new_size, interpolation=cv2.INTER_AREA)
-
     original_rgb = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2RGB)
     params: Mapping[str, Any] = (adjustments or {}).get("parameters", {}) if adjustments else {}
     settings = get_settings()
     base_bgr = original_bgr
-    if settings.final2x_enabled:
+    can_run_sr = settings.final2x_enabled and settings.preview_enable_final2x
+    if can_run_sr:
         model_override = resolve_model_for_adjustments(adjustments or {})
         scale_override = _extract_target_scale(params)
         sr_engine = get_final2x_engine(model_override)
@@ -188,10 +182,6 @@ def generate_preview_image(
     after_metrics = _compute_metrics(tweaked_rgb)
     metrics = _format_metrics(before_metrics, after_metrics)
 
-    _, buffer = cv2.imencode(
-        ".jpg",
-        cv2.cvtColor(tweaked_rgb, cv2.COLOR_RGB2BGR),
-        [int(cv2.IMWRITE_JPEG_QUALITY), 85],
-    )
+    _, buffer = cv2.imencode(".png", cv2.cvtColor(tweaked_rgb, cv2.COLOR_RGB2BGR))
     preview_base64 = base64.b64encode(buffer).decode("utf-8")
     return {"preview_base64": preview_base64, "metrics": metrics}

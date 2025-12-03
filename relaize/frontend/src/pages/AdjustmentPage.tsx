@@ -106,36 +106,6 @@ const PRESET_DEFAULT_MODELS: Record<PresetOption["id"], string> = {
   daily: "DAT_light_2x",
 };
 
-const clampValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-const buildLocalPreviewFilter = (params: Record<AdjustmentKey, number>): string => {
-  const compensation = params.compensation ?? 60;
-  const colorTemp = params.colorTemp ?? 0;
-  const saturation = params.saturation ?? 100;
-  const sharpness = params.sharpness ?? 55;
-  const dehaze = params.dehaze ?? 55;
-  const denoise = params.denoise ?? 45;
-  const edgePreserve = params.edgePreserve ?? 70;
-  const bright = clampValue(0.85 + (compensation - 60) / 120, 0.65, 1.6);
-  const contrast = clampValue(params.contrast ?? 1.2, 0.6, 3);
-  const saturate = clampValue(saturation / 100, 0.4, 2.6);
-  const hueShift = clampValue(colorTemp * 0.8, -40, 40);
-  const sepia = clampValue((dehaze - denoise) / 400, 0, 0.25);
-  const blurPx = clampValue((40 - sharpness) / 120, 0, 1);
-  const dropShadow = clampValue((edgePreserve - 50) / 220, 0, 0.35);
-  return [
-    `brightness(${bright})`,
-    `contrast(${contrast})`,
-    `saturate(${saturate})`,
-    `hue-rotate(${hueShift}deg)`,
-    `sepia(${sepia})`,
-    `blur(${blurPx}px)`,
-    dropShadow > 0 ? `drop-shadow(0 0 ${dropShadow}rem rgba(16,24,40,0.35))` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-};
-
 const isPresetOptionId = (value: string | null | undefined): value is PresetOption["id"] =>
   Boolean(value && PRESET_OPTIONS.some((option) => option.id === value));
 
@@ -223,19 +193,18 @@ export const AdjustmentPage = () => {
       ? "自定义"
       : PRESET_OPTIONS.find((option) => option.id === activePresetId)?.label ?? "预设";
   const parameterSignature = useMemo(() => JSON.stringify(parameters), [parameters]);
-  const localPreviewFilter = useMemo(() => buildLocalPreviewFilter(parameters), [parameterSignature]);
-  const shouldUseLocalPreview =
-    Boolean(beforeImage) && !previewImage && (hasLocalChanges || !afterImage || isPreviewLoading);
-  const previewOrResultImage = previewImage ?? afterImage ?? (shouldUseLocalPreview ? beforeImage : null);
-  const isPreviewActive = Boolean(previewImage || shouldUseLocalPreview);
+  const previewOrResultImage = previewImage ?? afterImage ?? null;
+  const isPreviewActive = Boolean(previewImage);
   const previewBadgeText = previewImage
     ? isPreviewLoading
       ? "预览生成中…"
       : hasLocalChanges
         ? "草稿预览"
         : "预览最新"
-    : shouldUseLocalPreview
-      ? "本地即时预览"
+    : hasLocalChanges
+      ? isPreviewLoading
+        ? "预览生成中…"
+        : "等待预览"
       : "预览最新";
 
   const lastSnapshotKeyRef = useRef<string | null>(null);
@@ -330,6 +299,17 @@ export const AdjustmentPage = () => {
       return;
     }
 
+    if (!hasLocalChanges) {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+      previewRequestRef.current += 1;
+      setIsPreviewLoading(false);
+      setPreviewImage(null);
+      return;
+    }
+
     if (previewTimerRef.current) {
       clearTimeout(previewTimerRef.current);
     }
@@ -346,7 +326,7 @@ export const AdjustmentPage = () => {
         };
         const response = await fetchTaskPreview(selectedTask.id, payload);
         if (previewRequestRef.current !== requestId) return;
-        setPreviewImage(`data:image/jpeg;base64,${response.preview_base64}`);
+        setPreviewImage(`data:image/png;base64,${response.preview_base64}`);
       } catch (error) {
         if (previewRequestRef.current !== requestId) return;
         setPreviewImage(null);
@@ -362,7 +342,7 @@ export const AdjustmentPage = () => {
         clearTimeout(previewTimerRef.current);
       }
     };
-  }, [selectedTask?.id, parameterSignature, activePresetId, isCustomMode, activeModelId]);
+  }, [selectedTask?.id, parameterSignature, activePresetId, isCustomMode, activeModelId, hasLocalChanges]);
 
   const sliderConfigs = useMemo<
     {
@@ -443,7 +423,7 @@ const applyPreset = (presetId: PresetOption["id"]) => {
   setParameters(preset.values);
   setActivePresetId(presetId);
   setActiveModelId(PRESET_DEFAULT_MODELS[presetId] ?? MODEL_OPTIONS[0].id);
-  setHasLocalChanges(false);
+  setHasLocalChanges(true);
   setStatusMessage(`已应用「${preset.label}」预设，可继续微调后点击应用修复。`);
   setErrorMessage(null);
 };
@@ -563,7 +543,6 @@ const applyPreset = (presetId: PresetOption["id"]) => {
                 src={previewOrResultImage}
                 alt={isPreviewActive ? "调参预览" : "修复后图像"}
                 className="h-full w-full object-contain bg-black"
-                style={shouldUseLocalPreview ? { filter: localPreviewFilter } : undefined}
               />
             ) : (
               <div className="flex h-64 items-center justify-center text-slate-400">
@@ -762,7 +741,6 @@ const applyPreset = (presetId: PresetOption["id"]) => {
         beforeImage={beforeImage}
         afterImage={previewOrResultImage}
         isPreviewActive={isPreviewActive}
-        previewFilter={shouldUseLocalPreview ? localPreviewFilter : undefined}
       />
     </div>
   );
@@ -774,10 +752,9 @@ type PreviewModalProps = {
   beforeImage?: string | null;
   afterImage?: string | null;
   isPreviewActive?: boolean;
-  previewFilter?: string;
 };
 
-const PreviewModal = ({ open, onClose, beforeImage, afterImage, isPreviewActive, previewFilter }: PreviewModalProps) => {
+const PreviewModal = ({ open, onClose, beforeImage, afterImage, isPreviewActive }: PreviewModalProps) => {
   if (!open) return null;
   const afterLabel = isPreviewActive ? "调参预览" : "修复后图像";
   return (
@@ -803,12 +780,7 @@ const PreviewModal = ({ open, onClose, beforeImage, afterImage, isPreviewActive,
           <div>
             <p className="mb-2 text-sm font-semibold text-slate-600">{afterLabel}</p>
             {afterImage ? (
-              <img
-                src={afterImage}
-                alt={afterLabel}
-                className="h-96 w-full rounded-2xl object-contain bg-black"
-                style={isPreviewActive && previewFilter ? { filter: previewFilter } : undefined}
-              />
+              <img src={afterImage} alt={afterLabel} className="h-96 w-full rounded-2xl object-contain bg-black" />
             ) : (
               <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
                 {isPreviewActive ? "生成预览中…" : "处理结果稍后生成"}

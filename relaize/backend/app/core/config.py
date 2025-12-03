@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     final2x_use_tile: bool = False
     final2x_tile_size: int = 128
     final2x_gh_proxy: str | None = None
+    preview_enable_final2x: bool = True
 
     def ensure_directories(self) -> None:
         for directory in (self.storage_root, self.upload_dir, self.processed_dir, self.report_dir):
