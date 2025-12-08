@@ -45,9 +45,7 @@ export const fetchTaskDetail = async (taskId: string): Promise<TaskDetail> => {
 export const uploadImage = async (file: File): Promise<UploadResponse> => {
   const formData = new FormData();
   formData.append("file", file);
-  const { data } = await apiClient.post<UploadResponse>("/uploads", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const { data } = await apiClient.post<UploadResponse>("/uploads", formData);
   return data;
 };
 

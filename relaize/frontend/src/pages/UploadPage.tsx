@@ -290,15 +290,15 @@ export const UploadPage = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto w-full max-w-6xl space-y-8">
       <header className="text-center text-white">
-        <div className="mx-auto max-w-3xl rounded-3xl bg-gradient-to-r from-brand-primary to-brand-secondary p-10 text-white shadow-card">
+        <div className="w-full rounded-3xl bg-gradient-to-r from-brand-primary to-brand-secondary p-10 text-white shadow-card">
           <h2 className="text-3xl font-bold">📥 上传待修复图像</h2>
           <p className="text-sm opacity-80">拖拽或选择文件，系统会自动识别夜景、雾霾、老照片、日常等场景</p>
         </div>
       </header>
 
-      <section className="rounded-3xl bg-white/90 p-8 shadow-card">
+      <section className="w-full rounded-3xl bg-white/90 p-8 shadow-card">
         <div
           className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-brand-primary/60 bg-gradient-to-r from-indigo-50 to-purple-50 p-10 text-center"
           onDragOver={(event) => event.preventDefault()}

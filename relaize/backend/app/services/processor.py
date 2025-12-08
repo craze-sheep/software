@@ -6,6 +6,8 @@ from typing import Any, Dict, Mapping, MutableMapping, Optional
 
 import cv2
 import numpy as np
+import torch
+from loguru import logger
 
 from app.core.config import get_settings
 from app.services.final2x_engine import get_final2x_engine, resolve_model_for_adjustments
@@ -132,13 +134,25 @@ def enhance_image(
     params: Mapping[str, Any] = (adjustments or {}).get("parameters", {}) if adjustments else {}
 
     settings = get_settings()
+    base_bgr = original_bgr
     if settings.final2x_enabled:
         model_override = resolve_model_for_adjustments(adjustments or {})
         scale_override = _extract_target_scale(params)
         sr_engine = get_final2x_engine(model_override)
-        base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
-    else:
-        base_bgr = original_bgr
+        try:
+            base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:  # pragma: no cover - hardware dependent
+            message = str(exc).lower()
+            if "out of memory" in message:
+                logger.warning(
+                    "Final2x OOM on %s, skipping super-resolution: %s",
+                    source,
+                    exc,
+                )
+                base_bgr = original_bgr
+                torch.cuda.empty_cache()
+            else:
+                raise
 
     super_res_rgb = cv2.cvtColor(base_bgr, cv2.COLOR_BGR2RGB)
 
@@ -173,7 +187,19 @@ def generate_preview_image(
         model_override = resolve_model_for_adjustments(adjustments or {})
         scale_override = _extract_target_scale(params)
         sr_engine = get_final2x_engine(model_override)
-        base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+        try:
+            base_bgr = sr_engine.process(original_bgr, target_scale=scale_override)
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:  # pragma: no cover - hardware dependent
+            message = str(exc).lower()
+            if "out of memory" in message:
+                logger.warning(
+                    "Final2x preview OOM, falling back to original image: %s",
+                    exc,
+                )
+                base_bgr = original_bgr
+                torch.cuda.empty_cache()
+            else:
+                raise
     base_rgb = cv2.cvtColor(base_bgr, cv2.COLOR_BGR2RGB)
 
     tweaked_rgb = _apply_adjustment_pipeline(base_rgb, params)
