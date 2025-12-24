@@ -51,6 +51,33 @@ MODEL_CATALOG: tuple[ModelSpec, ...] = (
         tags=("superres", "final2x", "写实"),
         weight_hint="final2x/RealESRGAN_x4plus.pth",
     ),
+    ModelSpec(
+        id="RealESRGAN_RealESRGAN_x4plus_anime_6B_4x",
+        name="RealESRGAN 4x Anime",
+        kind="superres",
+        description="针对动漫/插画优化的 4x 超分模型，线条与色彩更锐利。",
+        repo="https://github.com/xinntao/Real-ESRGAN",
+        tags=("superres", "final2x", "anime"),
+        weight_hint="final2x/RealESRGAN_x4plus_anime_6B.pth",
+    ),
+    ModelSpec(
+        id="GFPGAN",
+        name="GFPGAN 人脸修复",
+        kind="face_restore",
+        description="人脸修复增强，适合模糊/低清晰度人像补全五官。",
+        repo="https://github.com/TencentARC/GFPGAN",
+        tags=("face", "restore"),
+        weight_hint="gfpgan/GFPGANv1.4.pth",
+    ),
+    ModelSpec(
+        id="CodeFormer",
+        name="CodeFormer 人脸修复",
+        kind="face_restore",
+        description="保结构的人脸修复模型，可调节保真度/清晰度权衡。",
+        repo="https://github.com/sczhou/CodeFormer",
+        tags=("face", "restore"),
+        weight_hint="codeformer/codeformer.pth",
+    ),
 )
 
 
@@ -70,6 +97,29 @@ PIPELINE_CATALOG: tuple[PipelineSpec, ...] = (
             ),
         ),
         recommended_presets=("night", "haze", "daily"),
+    ),
+    PipelineSpec(
+        id="superres_face",
+        name="超分 + 人脸修复",
+        description="先超分，再对整张图做人脸修复（GFPGAN/CodeFormer）。",
+        tags=("superres", "face"),
+        stages=(
+            PipelineStageSpec(
+                id="superres",
+                name="Final2x",
+                model_id="RealESRGAN_RealESRGAN_x4plus_4x",
+                description="默认使用 Real-ESRGAN，可被任务重写。",
+                defaults={"scale": 4},
+            ),
+            PipelineStageSpec(
+                id="face_restore",
+                name="人脸修复",
+                model_id="GFPGAN",
+                description="GFPGAN/CodeFormer 可选，未安装依赖则跳过。",
+                optional=True,
+                defaults={"provider": "gfpgan", "fidelity": 0.5},
+            ),
+        ),
     ),
 )
 

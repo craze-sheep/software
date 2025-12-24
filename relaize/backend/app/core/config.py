@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     final2x_use_tile: bool = True
     final2x_tile_size: int = 192
     final2x_gh_proxy: str | None = None
-    preview_enable_final2x: bool = True
+    face_restore_enabled: bool = False
+    face_restore_provider: str = 'gfpgan'  # gfpgan | codeformer
+    face_restore_model_path: str | None = None
+    face_restore_device: str = 'auto'
+    face_restore_codeformer_fidelity: float = 0.5
 
     def ensure_directories(self) -> None:
         for directory in (self.storage_root, self.upload_dir, self.processed_dir, self.report_dir):

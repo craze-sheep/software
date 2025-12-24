@@ -58,13 +58,14 @@ class TaskWorker(threading.Thread):
         self.task_service.update_task(task.id, TaskUpdate(status=TaskStatus.processing))
 
         try:
+            if not source_path.exists():
+                raise FileNotFoundError(f"源文件不存在或已被清理: {source_path}")
             metrics = enhance_image(source_path, output_path)
             self.task_service.update_task(
                 task.id,
                 TaskUpdate(
                     status=TaskStatus.completed,
                     metrics=metrics,
-                    preview_url=f"/api/tasks/{task.id}/preview",
                     processed_at=datetime.utcnow(),
                     message="处理完成",
                 ),

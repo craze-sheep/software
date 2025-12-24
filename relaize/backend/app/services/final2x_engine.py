@@ -24,7 +24,10 @@ from loguru import logger
 from app.core.config import get_settings
 
 
-ALLOWED_MODEL_IDS = {"RealESRGAN_RealESRGAN_x4plus_4x"}
+ALLOWED_MODEL_IDS = {
+    "RealESRGAN_RealESRGAN_x4plus_4x",
+    "RealESRGAN_RealESRGAN_x4plus_anime_6B_4x",
+}
 
 # Silence noisy warnings/logs from CCCV and allocator hint on Windows
 warnings.filterwarnings("ignore", message="expandable_segments not supported on this platform")
@@ -195,7 +198,7 @@ class Final2xEngine:
         return candidates
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=1)
 def _build_engine(
     model_name: str,
     device: str,
@@ -234,6 +237,8 @@ def get_final2x_engine(model_name: str | None = None) -> Final2xEngine:
     settings = get_settings()
     fallback = settings.final2x_model_name.replace(".pth", "")
     effective_name = _normalize_model_id(model_name or fallback, fallback)
+    # keep only the current engine in cache
+    _build_engine.cache_clear()  # type: ignore[attr-defined]
     return _build_engine(
         effective_name,
         settings.final2x_device,
@@ -249,6 +254,7 @@ PRESET_MODEL_OVERRIDES: dict[str, str] = {
     "haze": "RealESRGAN_RealESRGAN_x4plus_4x",
     "vintage": "RealESRGAN_RealESRGAN_x4plus_4x",
     "daily": "RealESRGAN_RealESRGAN_x4plus_4x",
+    "anime": "RealESRGAN_RealESRGAN_x4plus_anime_6B_4x",
 }
 
 

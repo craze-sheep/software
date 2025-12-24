@@ -57,7 +57,6 @@ def main() -> None:
                 created_at=task.created_at or datetime.utcnow(),
                 updated_at=task.updated_at or datetime.utcnow(),
                 processed_at=task.processed_at,
-                preview_url=task.preview_url,
                 source_url=task.source_url,
                 metrics=task.metrics,
                 adjustments=task.adjustments,

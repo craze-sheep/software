@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import type { AdjustmentPayload, TaskDetail, TaskPreviewResponse, TaskSummary } from "../types/tasks";
+import type { AdjustmentPayload, TaskDetail, TaskSummary } from "../types/tasks";
 import type { UploadResponse } from "../types/upload";
 import type { ReportResponse } from "../types/report";
 
@@ -62,14 +62,6 @@ export const applyAdjustments = async (
   return data;
 };
 
-export const fetchTaskPreview = async (
-  taskId: string,
-  payload: AdjustmentPayload,
-): Promise<TaskPreviewResponse> => {
-  const { data } = await apiClient.post<TaskPreviewResponse>(`/tasks/${taskId}/preview-adjust`, payload);
-  return data;
-};
-
 export const processTask = async (taskId: string): Promise<TaskDetail> => {
   const { data } = await apiClient.post<TaskDetail>(`/tasks/${taskId}/process`);
   return data;
@@ -79,3 +71,11 @@ export const cancelTask = async (taskId: string): Promise<TaskDetail> => {
   const { data } = await apiClient.post<TaskDetail>(`/tasks/${taskId}/cancel`);
   return data;
 };
+
+export const clearTasks = async (): Promise<{ cleared: number }> => {
+  const { data } = await apiClient.delete<{ cleared: number }>("/tasks");
+  return data;
+};
+
+export const resolveResultUrl = (taskId?: string | null): string | null =>
+  taskId ? resolveFileUrl(`/api/tasks/${taskId}/result`) : null;

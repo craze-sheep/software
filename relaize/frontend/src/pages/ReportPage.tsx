@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchReport, fetchTasks, resolveFileUrl } from "../lib/api";
+import { fetchReport, fetchTasks, resolveResultUrl } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -53,8 +53,8 @@ export const ReportPage = () => {
   );
   const primarySection = useMemo(() => report?.sections?.[0], [report]);
   const processedImageUrl = useMemo(
-    () => resolveFileUrl(selectedTask?.preview_url),
-    [selectedTask?.preview_url],
+    () => (selectedTask?.status === "completed" && selectedTask?.id ? resolveResultUrl(selectedTask.id) : null),
+    [selectedTask?.id, selectedTask?.status],
   );
   const statusLabel = selectedTask?.status ? statusLabelMap[selectedTask.status] ?? selectedTask.status : "—";
 

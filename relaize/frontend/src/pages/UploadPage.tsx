@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { cancelTask, fetchTasks, processTask, resolveFileUrl, uploadImage } from "../lib/api";
+import {
+  cancelTask,
+  clearTasks,
+  fetchTasks,
+  processTask,
+  resolveResultUrl,
+  uploadImage,
+} from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
@@ -79,6 +86,7 @@ const collectFilesFromItems = async (
 };
 
 export const UploadPage = () => {
+  const queryClient = useQueryClient();
   const [files, setFiles] = useState<PreviewFile[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -123,6 +131,19 @@ export const UploadPage = () => {
       if (target) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((item) => item.id !== id);
     });
+  };
+
+  const handleClearTaskList = async () => {
+    setStatusMessage("正在清空服务器任务列表…");
+    setErrorMessage(null);
+    try {
+      const result = await clearTasks();
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setStatusMessage(result.cleared ? `已删除 ${result.cleared} 条任务` : "列表已清空");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("清空失败，请稍后重试或检查后端日志");
+    }
   };
 
   useEffect(
@@ -262,8 +283,8 @@ export const UploadPage = () => {
   };
 
   const handleDownloadResult = async (task: TaskSummary) => {
-    const fileUrl = resolveFileUrl(task.preview_url ?? undefined);
-    if (!fileUrl) {
+    const fileUrl = resolveResultUrl(task.id);
+    if (!fileUrl || task.status !== "completed") {
       setErrorMessage("该任务暂无可下载的修复结果");
       return;
     }
@@ -351,7 +372,7 @@ export const UploadPage = () => {
           />
         </div>
         <div className="mt-6 rounded-2xl border-l-4 border-blue-500 bg-blue-50 p-4 text-sm text-blue-600">
-          💡 提示：可在备注中标记预计场景（如夜景/雾霾/老照片/日常），系统会推荐对应模板并可在手动页面继续调参。
+          💡 提示：当前输出直接采用模型默认参数，无需手动调节；备注可用于标记夜景/雾霾/老照片等场景以便后续查看。
         </div>
       </section>
 
@@ -434,6 +455,13 @@ export const UploadPage = () => {
             >
               {isRefreshingTasks ? "刷新中…" : "↻ 刷新列表"}
             </button>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleClearTaskList}
+              disabled={isRefreshingTasks}
+            >
+              清空列表
+            </button>
           </div>
 
         </div>
@@ -445,7 +473,7 @@ export const UploadPage = () => {
         ) : (
           <div className="mt-6 space-y-3">
             {sortedTasks.map((task) => {
-              const previewUrl = resolveFileUrl(task.preview_url ?? undefined);
+              const resultUrl = resolveResultUrl(task.id);
               return (
                 <div
                   key={task.id}
@@ -461,23 +489,13 @@ export const UploadPage = () => {
                   <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end md:gap-3">
                     <div className="flex items-center gap-2">
                       <StatusBadge status={task.status} />
-                      {previewUrl ? (
+                      {task.status === "completed" && resultUrl ? (
                         <button
                           className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
                           onClick={() => handleDownloadResult(task)}
                         >
                           下载修复
                         </button>
-                      ) : null}
-                      {previewUrl ? (
-                        <a
-                          href={previewUrl}
-                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-brand-secondary"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          在线预览
-                        </a>
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">

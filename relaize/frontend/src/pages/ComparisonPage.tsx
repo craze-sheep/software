@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "classnames";
 
-import { fetchTasks, resolveFileUrl } from "../lib/api";
+import { fetchTasks, resolveFileUrl, resolveResultUrl } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
 
 type Mode = "split" | "slider";
@@ -90,7 +90,8 @@ export const ComparisonPage = () => {
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
   const beforeImage = resolveFileUrl(selectedTask?.source_url);
-  const afterImage = resolveFileUrl(selectedTask?.preview_url);
+  const afterImage =
+    selectedTask?.status === "completed" && selectedTask?.id ? resolveResultUrl(selectedTask.id) : null;
   const hasComparisonAssets = Boolean(beforeImage && afterImage);
 
   const metricsMap: MetricMap = useMemo(

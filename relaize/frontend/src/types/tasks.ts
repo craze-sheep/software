@@ -11,6 +11,9 @@ export type AdjustmentPayload = {
   parameters: AdjustmentParameters;
   note?: string | null;
   saved_at?: string | null;
+  face_restore_enabled?: boolean | null;
+  face_restore_provider?: string | null;
+  face_restore_fidelity?: number | null;
 };
 
 export interface TaskSummary {
@@ -19,7 +22,6 @@ export interface TaskSummary {
   size?: number;
   content_type?: string;
   status: TaskStatus;
-  preview_url?: string | null;
   source_url?: string | null;
   metrics?: Record<string, { before: number; after: number; delta: number }>;
   processed_at?: string | null;
@@ -30,9 +32,4 @@ export interface TaskSummary {
 
 export interface TaskDetail extends TaskSummary {
   message?: string | null;
-}
-
-export interface TaskPreviewResponse {
-  preview_base64: string;
-  metrics: Record<string, { before: number; after: number; delta: number }>;
 }

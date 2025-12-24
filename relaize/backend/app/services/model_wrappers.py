@@ -10,6 +10,7 @@ import numpy as np
 
 from app.core.config import get_settings
 from app.models.catalog import ModelSpec, get_model_spec
+from app.services.face_restoration import FaceRestorationUnavailable, restore_faces
 from app.services.final2x_engine import get_final2x_engine
 
 
@@ -53,6 +54,23 @@ def _run_final2x_superres(image_rgb: np.ndarray, model_id: str, stage_params: Ma
     return cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
 
 
+def _run_face_restore(image_rgb: np.ndarray, stage_params: Mapping[str, Any]) -> np.ndarray:
+    provider = stage_params.get("provider", "gfpgan")
+    fidelity = float(stage_params.get("fidelity", 0.5))
+    model_path = stage_params.get("model_path")
+    device = stage_params.get("device")
+    try:
+        return restore_faces(
+            image_rgb,
+            provider=provider,
+            fidelity=fidelity,
+            model_path=model_path,
+            device=device,
+        )
+    except FaceRestorationUnavailable as exc:
+        raise StageNotConfiguredError(str(exc)) from exc
+
+
 def run_model_stage(
     model_id: str,
     image_rgb: np.ndarray,
@@ -62,5 +80,7 @@ def run_model_stage(
     spec: ModelSpec | None = get_model_spec(model_id)
     if spec and spec.kind == "superres":
         return _run_final2x_superres(image_rgb, model_id, stage_params, context)
+    if spec and spec.kind == "face_restore":
+        return _run_face_restore(image_rgb, stage_params)
 
     raise StageNotConfiguredError(f"模型 {model_id} 未接入执行器（当前仅支持 Final2x 超分模型）")

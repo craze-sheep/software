@@ -26,7 +26,6 @@ class TaskBase(BaseModel):
 
 
 class TaskSummary(TaskBase):
-    preview_url: Optional[str] = None
     source_url: Optional[str] = None
     processed_at: Optional[datetime] = None
     metrics: Optional[dict] = None
@@ -47,19 +46,18 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     metrics: Optional[dict] = None
     message: Optional[str] = None
-    preview_url: Optional[str] = None
     processed_at: Optional[datetime] = None
     adjustments: Optional[dict] = None
 
 
 class AdjustmentPayload(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
     parameters: dict = Field(default_factory=dict)
     preset_id: Optional[str] = None
     note: Optional[str] = None
     model_name: Optional[str] = None
     target_scale: Optional[float] = Field(default=None, ge=0.1, le=8.0)
-
-
-class TaskPreviewResponse(BaseModel):
-    preview_base64: str
-    metrics: dict
+    face_restore_enabled: Optional[bool] = None
+    face_restore_provider: Optional[str] = None
+    face_restore_fidelity: Optional[float] = Field(default=None, ge=0.0, le=1.0)

@@ -20,7 +20,6 @@ class TaskRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    preview_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     adjustments: Mapped[dict | None] = mapped_column(JSON, nullable=True)

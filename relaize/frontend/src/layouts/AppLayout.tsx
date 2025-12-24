@@ -3,7 +3,7 @@ import clsx from "classnames";
 
 const navItems = [
   { label: "上传", path: "/upload" },
-  { label: "手动调整", path: "/adjustment" },
+  { label: "修复结果", path: "/adjustment" },
   { label: "效果对比", path: "/comparison" },
   { label: "评估报告", path: "/report" },
 ];
@@ -15,7 +15,7 @@ export const AppLayout = () => (
         <div>
           <p className="text-sm uppercase tracking-[0.3em] opacity-80">多场景图像修复工具</p>
           <h1 className="text-3xl font-bold tracking-wide">Image Restoration Studio</h1>
-          <p className="text-xs opacity-80">覆盖上传 → 调参 → 对比 → 报告全链路，支持夜景、雾霾、老照片等多场景</p>
+          <p className="text-xs opacity-80">覆盖上传 → 修复 → 对比 → 报告全链路，支持夜景、雾霾、老照片等多场景</p>
         </div>
         <nav className="flex flex-wrap gap-3">
           {navItems.map((item) => (

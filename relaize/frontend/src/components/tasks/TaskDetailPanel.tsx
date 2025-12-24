@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchTaskDetail, resolveFileUrl } from "../../lib/api";
+import { fetchTaskDetail, resolveFileUrl, resolveResultUrl } from "../../lib/api";
 import type { TaskDetail } from "../../types/tasks";
 
 type TaskDetailPanelProps = {
@@ -80,9 +80,9 @@ export const TaskDetailPanel = ({ taskId, onClose }: TaskDetailPanelProps) => {
                   下载原始图像
                 </a>
               ) : null}
-              {resolveFileUrl(task.preview_url) ? (
+              {task.status === "completed" && resolveResultUrl(task.id) ? (
                 <a
-                  href={resolveFileUrl(task.preview_url) ?? undefined}
+                  href={resolveResultUrl(task.id) ?? undefined}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
