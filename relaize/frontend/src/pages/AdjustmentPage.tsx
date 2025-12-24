@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { applyAdjustments, fetchTaskDetail, fetchTasks, resolveFileUrl, resolveResultUrl } from "../lib/api";
@@ -44,13 +44,15 @@ const MODEL_COMBOS: ModelCombo[] = [
 
 export const AdjustmentPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { data: tasks = [], isFetching: isFetchingTasks } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
     refetchInterval: 8000,
   });
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const initialTaskId = searchParams.get("taskId");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedComboId, setSelectedComboId] = useState<string>(MODEL_COMBOS[0].id);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -59,13 +61,15 @@ export const AdjustmentPage = () => {
 
   useEffect(() => {
     if (!tasks.length) return;
-    setSelectedTaskId((current) => {
-      if (current && tasks.some((task) => task.id === current)) {
-        return current;
-      }
-      return tasks[0].id;
-    });
-  }, [tasks]);
+    if (!selectedTaskId) {
+      const first = tasks[0].id;
+      setSelectedTaskId(first);
+      setSearchParams({ taskId: first });
+      return;
+    }
+    // keep current selection even if不在当前列表，以便直接加载指定任务
+    setSearchParams({ taskId: selectedTaskId });
+  }, [tasks, selectedTaskId, setSearchParams]);
 
   const { data: selectedTask, isFetching: isFetchingTaskDetail } = useQuery<TaskDetail>({
     queryKey: ["task-detail", selectedTaskId],
@@ -149,6 +153,7 @@ export const AdjustmentPage = () => {
       };
       const newTask = await applyAdjustments(selectedTask.id, payload);
       setSelectedTaskId(newTask.id);
+      setSearchParams({ taskId: newTask.id });
       setStatusMessage("已创建新任务并提交模型切换，正在重新排队处理中…");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["tasks"] }),
@@ -176,7 +181,11 @@ export const AdjustmentPage = () => {
             <select
               className="w-full truncate rounded-full border border-slate-200 px-5 py-2.5 text-base text-slate-700"
               value={selectedTaskId ?? ""}
-              onChange={(event) => setSelectedTaskId(event.target.value)}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setSelectedTaskId(nextId);
+                setSearchParams({ taskId: nextId });
+              }}
               disabled={!tasks.length || isFetchingTasks}
             >
               {!tasks.length ? (

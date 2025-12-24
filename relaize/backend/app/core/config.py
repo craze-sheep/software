@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     redis_url: str = 'redis://localhost:6379/0'
     final2x_enabled: bool = True
     final2x_model_name: str = 'RealESRGAN_RealESRGAN_x4plus_4x'
-    final2x_device: str = 'auto'
+    final2x_device: str = 'cuda'
     final2x_target_scale: float = 2.0
     final2x_use_tile: bool = True
     final2x_tile_size: int = 192
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     face_restore_enabled: bool = False
     face_restore_provider: str = 'gfpgan'  # gfpgan | codeformer
     face_restore_model_path: str | None = None
-    face_restore_device: str = 'auto'
+    face_restore_device: str = 'cuda'
     face_restore_codeformer_fidelity: float = 0.5
 
     def ensure_directories(self) -> None:

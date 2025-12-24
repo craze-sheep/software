@@ -5,6 +5,7 @@ import platform
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 import warnings
 import logging
@@ -15,6 +16,14 @@ import numpy as np
 # Avoid unsupported allocator hint on Windows to silence torch warning.
 if platform.system() != "Windows":
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+# Persist CCCV model cache inside project storage to avoid repeated downloads.
+if "CCCV_CACHE_MODEL_DIR" not in os.environ:
+    default_cccv_cache = Path(__file__).resolve().parent.parent.parent / "storage" / "weights" / "cccv"
+    default_cccv_cache.mkdir(parents=True, exist_ok=True)
+    os.environ["CCCV_CACHE_MODEL_DIR"] = str(default_cccv_cache)
+    # Force CCCV to use local cache as the model zoo to prevent network fetches.
+    os.environ.setdefault("CCCV_REMOTE_MODEL_ZOO", default_cccv_cache.resolve().as_uri())
 
 import torch
 from cccv import AutoModel, ConfigType
@@ -62,13 +71,19 @@ class Final2xEngine:
 
     @staticmethod
     def _select_device(requested: str) -> str:
-        if requested and requested.lower().startswith("cuda"):
-            if not torch.cuda.is_available():
-                raise RuntimeError(
-                    f"CUDA device '{requested}' requested but torch.cuda.is_available() is False. "
-                    "GPU is required for Final2x; please install CUDA or choose a different device."
-                )
-        return requested or "cpu"
+        requested_lower = (requested or "").lower()
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "Final2x requires CUDA-capable GPU; torch.cuda.is_available() is False."
+            )
+
+        if requested_lower in ("", "auto"):
+            return "cuda"
+        if not requested_lower.startswith("cuda"):
+            raise RuntimeError(
+                f"Unsupported device '{requested}'. Only CUDA devices are allowed for Final2x."
+            )
+        return requested
 
     @staticmethod
     def _resolve_model_name(name: str) -> ConfigType | str:

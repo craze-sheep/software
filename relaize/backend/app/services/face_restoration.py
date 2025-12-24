@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import types
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 import cv2
@@ -11,8 +12,48 @@ import torch
 from loguru import logger
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+# Use the repo-level gfpgan/weights directory to satisfy facexlib/GFPGAN defaults.
+GFPGAN_WEIGHTS_ROOT = (PROJECT_ROOT / "gfpgan" / "weights").resolve()
+
+
 class FaceRestorationUnavailable(RuntimeError):
     """Raised when face restoration backend is not available."""
+
+
+def _resolve_weight_path(candidate: str | None, default_path: Path) -> Path:
+    """
+    Resolve a weight path; disallow implicit downloads by requiring a real file on disk.
+    """
+    path = Path(candidate) if candidate else default_path
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    if not path.exists():
+        raise FaceRestorationUnavailable(f"缺少本地权重文件：{path}")
+    return path
+
+
+def _resolve_weight_dir(path: Path) -> Path:
+    """Resolve a weights directory and ensure it exists (no downloads)."""
+    resolved = path if path.is_absolute() else PROJECT_ROOT / path
+    if not resolved.exists():
+        raise FaceRestorationUnavailable(f"缺少本地权重目录：{resolved}")
+    return resolved
+
+
+def _ensure_gfpgan_weights(root: Path) -> Path:
+    """
+    Ensure all required GFPGAN/facexlib weights are present; fail fast to avoid any download attempt.
+    """
+    required = [
+        root / "GFPGANv1.4.pth",
+        root / "detection_Resnet50_Final.pth",
+        root / "parsing_parsenet.pth",
+    ]
+    missing = [str(p) for p in required if not p.exists()]
+    if missing:
+        raise FaceRestorationUnavailable("缺少本地权重文件，请先放置: " + ", ".join(missing))
+    return root
 
 
 def _ensure_torchvision_compat() -> None:
@@ -35,9 +76,14 @@ def _ensure_torchvision_compat() -> None:
 
 
 def _select_device(preferred: str | None = None) -> str:
-    if preferred and preferred.lower() not in ("auto", ""):
-        return preferred
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    requested = (preferred or "").lower()
+    if not torch.cuda.is_available():
+        raise FaceRestorationUnavailable("人脸修复需要 CUDA GPU，当前 torch.cuda.is_available() 为 False。")
+    if requested in ("", "auto"):
+        return "cuda"
+    if not requested.startswith("cuda"):
+        raise FaceRestorationUnavailable(f"仅支持 CUDA 设备，收到: {preferred}")
+    return preferred
 
 
 @lru_cache(maxsize=1)
@@ -49,9 +95,11 @@ def _get_gfpgan_restorer(model_path: str | None, device: str):
         detail = f"{exc.__class__.__name__}: {exc}"
         raise FaceRestorationUnavailable(f"GFPGAN 依赖缺失（{detail}），请先 pip install gfpgan") from exc
 
-    logger.info("Loading GFPGAN model on %s (path=%s)", device, model_path or "GFPGANv1.4 auto")
+    weights_root = _ensure_gfpgan_weights(GFPGAN_WEIGHTS_ROOT)
+    weight_path = _resolve_weight_path(model_path, weights_root / "GFPGANv1.4.pth")
+    logger.info("Loading GFPGAN model on %s (path=%s)", device, weight_path)
     return GFPGANer(
-        model_path=model_path,  # GFPGANer 会自动下载缺省权重
+        model_path=str(weight_path),
         upscale=1,
         arch="clean",
         channel_multiplier=2,
@@ -76,7 +124,6 @@ def _run_gfpgan(image_rgb: np.ndarray, model_path: str | None, device: str) -> n
 def _get_codeformer(model_path: str | None, device: str):
     _ensure_torchvision_compat()
     try:
-        from basicsr.utils.download_util import load_file_from_url
         from basicsr.archs.codeformer_arch import CodeFormer
         from facexlib.utils.face_restoration_helper import FaceRestoreHelper
     except ImportError as exc:  # pragma: no cover - optional dependency
@@ -85,16 +132,14 @@ def _get_codeformer(model_path: str | None, device: str):
             f"CodeFormer 依赖缺失（{detail}），请先 pip install basicsr facexlib timm lpips"
         ) from exc
 
-    weight_path = model_path or load_file_from_url(
-        url="https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
-        model_dir="weights/CodeFormer",
-    )
+    weight_path = _resolve_weight_path(model_path, PROJECT_ROOT / "storage" / "models" / "codeformer.pth")
     logger.info("Loading CodeFormer weight from %s on %s", weight_path, device)
     net = CodeFormer(dim_embd=512, codebook_size=1024, n_head=8, n_layers=9, connect_list=["32", "64", "128", "256"]).to(device)
     checkpoint = torch.load(weight_path, map_location=device)
     net.load_state_dict(checkpoint["params_ema"])
     net.eval()
 
+    weights_root = _ensure_gfpgan_weights(GFPGAN_WEIGHTS_ROOT)
     helper = FaceRestoreHelper(
         upscale_factor=1,
         face_size=512,
@@ -102,6 +147,7 @@ def _get_codeformer(model_path: str | None, device: str):
         det_model="retinaface_resnet50",
         save_ext="png",
         device=device,
+        model_root=str(weights_root),
     )
     return net, helper
 

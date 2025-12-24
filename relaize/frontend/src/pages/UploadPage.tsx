@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 import {
   cancelTask,
@@ -11,7 +12,6 @@ import {
   uploadImage,
 } from "../lib/api";
 import type { TaskSummary } from "../types/tasks";
-import { TaskDetailPanel } from "../components/tasks/TaskDetailPanel";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
 type DataTransferItemWithWebkit = DataTransferItem & {
@@ -86,12 +86,12 @@ const collectFilesFromItems = async (
 };
 
 export const UploadPage = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<PreviewFile[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -501,7 +501,7 @@ export const UploadPage = () => {
                     <div className="flex flex-wrap gap-2">
                       <button
                         className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
-                        onClick={() => setSelectedTaskId(task.id)}
+                        onClick={() => navigate(`/adjustment?taskId=${task.id}`)}
                       >
                         查看详情
                       </button>
@@ -529,10 +529,6 @@ export const UploadPage = () => {
           </div>
         )}
       </section>
-
-      {selectedTaskId ? (
-        <TaskDetailPanel taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
-      ) : null}
     </div>
   );
 };
