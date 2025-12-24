@@ -53,7 +53,6 @@ export const AdjustmentPage = () => {
   });
   const initialTaskId = searchParams.get("taskId");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedComboId, setSelectedComboId] = useState<string>(MODEL_COMBOS[0].id);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -67,7 +66,7 @@ export const AdjustmentPage = () => {
       setSearchParams({ taskId: first });
       return;
     }
-    // keep current selection even if不在当前列表，以便直接加载指定任务
+    // keep current selection even if not in current list, to allow direct loading by id
     setSearchParams({ taskId: selectedTaskId });
   }, [tasks, selectedTaskId, setSearchParams]);
 
@@ -130,6 +129,14 @@ export const AdjustmentPage = () => {
       return;
     }
     navigate("/comparison");
+  };
+
+  const handleGoReport = () => {
+    if (selectedTask?.id) {
+      navigate(`/report?taskId=${selectedTask.id}`);
+    } else {
+      navigate("/report");
+    }
   };
 
   const handleApplyModel = async () => {
@@ -257,10 +264,10 @@ export const AdjustmentPage = () => {
           <div className="flex flex-wrap gap-3">
             <button
               className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
-              onClick={() => setIsPreviewOpen(true)}
+              onClick={handleGoReport}
               disabled={!hasImages}
             >
-              全屏预览
+              查看评估报告
             </button>
             <button
               className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
@@ -372,57 +379,6 @@ export const AdjustmentPage = () => {
         </div>
       </aside>
 
-      <PreviewModal
-        open={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        beforeImage={beforeImage}
-        afterImage={afterImage}
-      />
-    </div>
-  );
-};
-
-type PreviewModalProps = {
-  open: boolean;
-  onClose: () => void;
-  beforeImage?: string | null;
-  afterImage?: string | null;
-};
-
-const PreviewModal = ({ open, onClose, beforeImage, afterImage }: PreviewModalProps) => {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-      <div className="w-full max-w-5xl rounded-3xl bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800">全屏预览</h3>
-          <button className="text-slate-500 hover:text-slate-800" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="mb-2 text-sm font-semibold text-slate-600">原始图像</p>
-            {beforeImage ? (
-              <img src={beforeImage} alt="原始图像" className="h-96 w-full rounded-2xl object-contain bg-black" />
-            ) : (
-              <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                暂无原始图像
-              </div>
-            )}
-          </div>
-          <div>
-            <p className="mb-2 text-sm font-semibold text-slate-600">模型输出</p>
-            {afterImage ? (
-              <img src={afterImage} alt="模型输出" className="h-96 w-full rounded-2xl object-contain bg-black" />
-            ) : (
-              <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                处理结果尚未生成
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

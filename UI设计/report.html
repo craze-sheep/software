@@ -360,59 +360,59 @@
         </div>
 
         <div class="section">
-            <div class="section-title">📈 定量评估指标</div>
+            <div class="section-title">📈 定量评估指标（PSNR / SSIM / MSE / 信息熵）</div>
 
             <div class="metrics-grid">
                 <div class="metric-card">
-                    <div class="metric-name">UIQM（图像质量）</div>
+                    <div class="metric-name">PSNR（dB）</div>
                     <div class="metric-values">
-                        <span class="metric-before">2.1</span>
+                        <span class="metric-before">28.5</span>
                         <span class="metric-arrow">→</span>
-                        <span class="metric-after">3.8</span>
+                        <span class="metric-after">32.1</span>
                     </div>
                     <div class="metric-bar">
-                        <div class="metric-progress" style="width: 95%;"></div>
+                        <div class="metric-progress" style="width: 75%;"></div>
                     </div>
-                    <div class="metric-improvement">↑ 81% 提升</div>
+                    <div class="metric-improvement">↑ +3.6 dB</div>
                 </div>
 
                 <div class="metric-card">
-                    <div class="metric-name">UCIQE（颜色图像质量）</div>
+                    <div class="metric-name">SSIM</div>
                     <div class="metric-values">
-                        <span class="metric-before">0.45</span>
+                        <span class="metric-before">0.78</span>
                         <span class="metric-arrow">→</span>
-                        <span class="metric-after">0.62</span>
+                        <span class="metric-after">0.91</span>
                     </div>
                     <div class="metric-bar">
-                        <div class="metric-progress" style="width: 80%;"></div>
+                        <div class="metric-progress" style="width: 82%;"></div>
                     </div>
-                    <div class="metric-improvement">↑ 38% 提升</div>
+                    <div class="metric-improvement">↑ +13%</div>
                 </div>
 
                 <div class="metric-card">
-                    <div class="metric-name">信息熵值</div>
+                    <div class="metric-name">MSE（越低越好）</div>
                     <div class="metric-values">
-                        <span class="metric-before">6.2</span>
+                        <span class="metric-before">1200</span>
                         <span class="metric-arrow">→</span>
-                        <span class="metric-after">7.1</span>
+                        <span class="metric-after">450</span>
+                    </div>
+                    <div class="metric-bar">
+                        <div class="metric-progress" style="width: 60%;"></div>
+                    </div>
+                    <div class="metric-improvement">↓ -62%</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-name">信息熵</div>
+                    <div class="metric-values">
+                        <span class="metric-before">7.1</span>
+                        <span class="metric-arrow">→</span>
+                        <span class="metric-after">7.5</span>
                     </div>
                     <div class="metric-bar">
                         <div class="metric-progress" style="width: 70%;"></div>
                     </div>
-                    <div class="metric-improvement">↑ 15% 提升</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-name">平均梯度（清晰度）</div>
-                    <div class="metric-values">
-                        <span class="metric-before">4.5</span>
-                        <span class="metric-arrow">→</span>
-                        <span class="metric-after">8.3</span>
-                    </div>
-                    <div class="metric-bar">
-                        <div class="metric-progress" style="width: 90%;"></div>
-                    </div>
-                    <div class="metric-improvement">↑ 84% 提升</div>
+                    <div class="metric-improvement">↑ +0.4</div>
                 </div>
             </div>
 
@@ -428,38 +428,31 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>UIQM</strong></td>
-                        <td>2.1</td>
-                        <td class="positive">3.8</td>
-                        <td class="positive">+81%</td>
+                        <td><strong>PSNR</strong></td>
+                        <td>28.5</td>
+                        <td class="positive">32.1</td>
+                        <td class="positive">+3.6 dB</td>
                         <td>⭐⭐⭐⭐⭐</td>
                     </tr>
                     <tr>
-                        <td><strong>UCIQE</strong></td>
-                        <td>0.45</td>
-                        <td class="positive">0.62</td>
-                        <td class="positive">+38%</td>
+                        <td><strong>SSIM</strong></td>
+                        <td>0.78</td>
+                        <td class="positive">0.91</td>
+                        <td class="positive">+0.13</td>
                         <td>⭐⭐⭐⭐</td>
                     </tr>
                     <tr>
-                        <td><strong>色彩均衡度</strong></td>
-                        <td>低（严重蓝绿偏）</td>
-                        <td class="positive">高（自然色彩）</td>
-                        <td class="positive">显著改善</td>
-                        <td>⭐⭐⭐⭐⭐</td>
-                    </tr>
-                    <tr>
-                        <td><strong>对比度水平</strong></td>
-                        <td>0.32</td>
-                        <td class="positive">0.56</td>
-                        <td class="positive">+75%</td>
+                        <td><strong>MSE（越低越好）</strong></td>
+                        <td>1200</td>
+                        <td class="positive">450</td>
+                        <td class="positive">-62%</td>
                         <td>⭐⭐⭐⭐</td>
                     </tr>
                     <tr>
-                        <td><strong>清晰度指数</strong></td>
-                        <td>4.5</td>
-                        <td class="positive">8.3</td>
-                        <td class="positive">+84%</td>
+                        <td><strong>信息熵</strong></td>
+                        <td>7.1</td>
+                        <td class="positive">7.5</td>
+                        <td class="positive">+0.4</td>
                         <td>⭐⭐⭐⭐⭐</td>
                     </tr>
                     <tr>

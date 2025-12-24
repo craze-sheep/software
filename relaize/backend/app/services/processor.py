@@ -13,39 +13,81 @@ from app.services.face_restoration import FaceRestorationUnavailable, restore_fa
 from app.services.final2x_engine import get_final2x_engine, resolve_model_for_adjustments
 
 
-def _compute_metrics(image: np.ndarray) -> Dict[str, float]:
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    brightness = gray.mean() / 255.0
-    contrast = gray.std() / 64.0
-    saturation = np.mean(cv2.cvtColor(image, cv2.COLOR_RGB2HSV)[..., 1]) / 255.0
-    lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+def _compute_psnr(before: np.ndarray, after: np.ndarray) -> float:
+    mse = np.mean((before.astype(np.float64) - after.astype(np.float64)) ** 2)
+    if mse == 0:
+        # Identical images; cap to a large finite value to keep JSON serialization valid.
+        return 100.0
+    PIXEL_MAX = 255.0
+    return 20 * np.log10(PIXEL_MAX / np.sqrt(mse))
 
+
+def _compute_ssim(before: np.ndarray, after: np.ndarray) -> float:
+    """Simple SSIM over the luminance channel (single-window approximation)."""
+    gray1 = cv2.cvtColor(before, cv2.COLOR_RGB2GRAY).astype(np.float64)
+    gray2 = cv2.cvtColor(after, cv2.COLOR_RGB2GRAY).astype(np.float64)
+    C1 = (0.01 * 255) ** 2
+    C2 = (0.03 * 255) ** 2
+
+    mu1 = gray1.mean()
+    mu2 = gray2.mean()
+    sigma1_sq = ((gray1 - mu1) ** 2).mean()
+    sigma2_sq = ((gray2 - mu2) ** 2).mean()
+    sigma12 = ((gray1 - mu1) * (gray2 - mu2)).mean()
+
+    numerator = (2 * mu1 * mu2 + C1) * (2 * sigma12 + C2)
+    denominator = (mu1 ** 2 + mu2 ** 2 + C1) * (sigma1_sq + sigma2_sq + C2)
+    return float(numerator / (denominator + 1e-12))
+
+
+def _compute_mse(before: np.ndarray, after: np.ndarray) -> float:
+    return float(np.mean((before.astype(np.float64) - after.astype(np.float64)) ** 2))
+
+
+def _compute_entropy(image: np.ndarray) -> float:
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     hist = cv2.calcHist([gray], [0], None, [256], [0, 256]).ravel()
     hist = hist / (hist.sum() + 1e-9)
     non_zero = hist[hist > 0]
-    entropy = float(-np.sum(non_zero * np.log2(non_zero)))
+    return float(-np.sum(non_zero * np.log2(non_zero)))
 
-    uiqm = 2.0 + brightness * 2.5 + saturation * 1.5
-    uciqe = 0.4 + contrast * 0.4 + saturation * 0.2
-    clarity = min(100.0, lap_var / 5.0)
 
+def _ensure_same_size(reference: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Resize target to match reference HxW if不同尺寸."""
+    if reference.shape[:2] == target.shape[:2]:
+        return target
+    h, w = reference.shape[:2]
+    resized = cv2.resize(target, (w, h), interpolation=cv2.INTER_LINEAR)
+    return resized
+
+
+def _compute_metrics(before: np.ndarray, after: np.ndarray) -> Dict[str, float]:
+    after = _ensure_same_size(before, after)
+    psnr = _compute_psnr(before, after)
+    ssim = _compute_ssim(before, after)
+    mse = _compute_mse(before, after)
+    entropy = _compute_entropy(after)
     return {
-        "uiqm": round(uiqm, 2),
-        "uciqe": round(uciqe, 2),
-        "entropy": round(entropy, 2),
-        "clarity": round(clarity, 2),
+        "psnr": psnr,
+        "ssim": ssim,
+        "mse": mse,
+        "entropy": entropy,
     }
 
 
-def _format_metrics(before: Dict[str, float], after: Dict[str, float]) -> Dict[str, Dict[str, float]]:
+def _format_metrics(before: Dict[str, float], after: Dict[str, float]) -> Dict[str, Dict[str, float | None]]:
     combined: Dict[str, Dict[str, float]] = {}
     for key in after.keys():
         b = before[key]
         a = after[key]
+        if np.isfinite(a) and np.isfinite(b):
+            delta: float | None = a - b
+        else:
+            delta = None
         combined[key] = {
-            "before": round(b, 2),
-            "after": round(a, 2),
-            "delta": round(a - b, 2),
+            "before": round(b, 4) if np.isfinite(b) else b,
+            "after": round(a, 4) if np.isfinite(a) else a,
+            "delta": round(delta, 4) if delta is not None else None,
         }
     return combined
 
@@ -129,6 +171,7 @@ def enhance_image(
     # Save as PNG to avoid any lossy compression on output.
     cv2.imwrite(str(destination), cv2.cvtColor(result_rgb, cv2.COLOR_RGB2BGR), [int(cv2.IMWRITE_PNG_COMPRESSION), 3])
 
-    before_metrics = _compute_metrics(original_rgb)
-    after_metrics = _compute_metrics(result_rgb)
+    after_metrics = _compute_metrics(original_rgb, result_rgb)
+    # 对齐显示：修复后=修复图对输入图，修复前使用同一组值以避免虚高对比
+    before_metrics = after_metrics
     return _format_metrics(before_metrics, after_metrics)

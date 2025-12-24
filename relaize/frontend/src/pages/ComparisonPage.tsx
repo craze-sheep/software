@@ -17,10 +17,10 @@ type MetricValue = {
 type MetricMap = Record<string, MetricValue>;
 
 const FALLBACK_METRICS: MetricMap = {
-  uiqm: { before: 2.1, after: 3.8, delta: 1.7 },
-  uciqe: { before: 0.45, after: 0.62, delta: 0.17 },
-  clarity: { before: 4.2, after: 7.8, delta: 3.6 },
-  entropy: { before: 6.2, after: 7.1, delta: 0.9 },
+  psnr: { before: 28.5, after: 32.1, delta: 3.6 },
+  ssim: { before: 0.78, after: 0.91, delta: 0.13 },
+  mse: { before: 1200, after: 450, delta: -750 },
+  entropy: { before: 7.1, after: 7.5, delta: 0.4 },
 };
 
 type Feedback = {
@@ -38,11 +38,12 @@ const GuideOverlay = () => (
   </div>
 );
 
-const formatPercentChange = (metric?: MetricValue) => {
+const formatPercentChange = (metric?: MetricValue, lowerIsBetter = false) => {
   if (!metric || metric.before === 0) {
     return null;
   }
-  const ratio = ((metric.after - metric.before) / metric.before) * 100;
+  const diff = lowerIsBetter ? metric.before - metric.after : metric.after - metric.before;
+  const ratio = (diff / metric.before) * 100;
   const rounded = Math.round(ratio);
   return `${rounded > 0 ? "+" : ""}${rounded}%`;
 };
@@ -120,25 +121,25 @@ export const ComparisonPage = () => {
   const metricCards = useMemo(
     () => [
       {
-        id: "uiqm",
-        label: "UIQM 提升",
-        value: metricValue(metricsMap.uiqm),
-        percent: formatPercentChange(metricsMap.uiqm),
-        summary: `从 ${metricsMap.uiqm.before} 到 ${metricsMap.uiqm.after}`,
+        id: "psnr",
+        label: "PSNR",
+        value: metricValue(metricsMap.psnr),
+        percent: formatPercentChange(metricsMap.psnr),
+        summary: `峰值信噪比 ${metricsMap.psnr.before?.toFixed?.(2) ?? metricsMap.psnr.before} → ${metricsMap.psnr.after?.toFixed?.(2) ?? metricsMap.psnr.after}`,
       },
       {
-        id: "uciqe",
-        label: "UCIQE 提升",
-        value: metricValue(metricsMap.uciqe),
-        percent: formatPercentChange(metricsMap.uciqe),
-        summary: `从 ${metricsMap.uciqe.before} 到 ${metricsMap.uciqe.after}`,
+        id: "ssim",
+        label: "SSIM",
+        value: metricValue(metricsMap.ssim),
+        percent: formatPercentChange(metricsMap.ssim),
+        summary: `结构相似度 ${metricsMap.ssim.before?.toFixed?.(4) ?? metricsMap.ssim.before} → ${metricsMap.ssim.after?.toFixed?.(4) ?? metricsMap.ssim.after}`,
       },
       {
-        id: "clarity",
-        label: "清晰度",
-        value: metricValue(metricsMap.clarity),
-        percent: formatPercentChange(metricsMap.clarity),
-        summary: `平均梯度 ${metricsMap.clarity.before} → ${metricsMap.clarity.after}`,
+        id: "mse",
+        label: "MSE（越低越好）",
+        value: metricValue(metricsMap.mse),
+        percent: formatPercentChange(metricsMap.mse, true),
+        summary: `均方误差 ${metricsMap.mse.before} → ${metricsMap.mse.after}`,
       },
       {
         id: "entropy",

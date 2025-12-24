@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchReport, fetchTasks, resolveResultUrl } from "../lib/api";
@@ -18,23 +18,68 @@ const statusLabelMap: Record<string, string> = {
   cancelled: "已取消",
 };
 
+type MetricRecord = { before: number; after: number; delta?: number };
+
+const pickMetricMap = (report: any, task: TaskSummary | undefined): Record<string, MetricRecord | undefined> => {
+  // Prefer report primary section metrics if present
+  const sectionMetrics: Record<string, MetricRecord> = {};
+  const primarySection = report?.sections?.[0];
+  if (primarySection?.metrics?.length) {
+    primarySection.metrics.forEach((m: any) => {
+      if (!m?.name) return;
+      sectionMetrics[String(m.name).toLowerCase()] = {
+        before: Number(m.before),
+        after: Number(m.after),
+        delta: m.delta !== undefined ? Number(m.delta) : Number(m.after) - Number(m.before),
+      };
+    });
+  }
+  // Fallback to task.metrics object if available
+  const taskMetrics: Record<string, MetricRecord> = {};
+  if (task?.metrics && typeof task.metrics === "object") {
+    Object.entries(task.metrics).forEach(([key, value]: [string, any]) => {
+      if (!value) return;
+      taskMetrics[key.toLowerCase()] = {
+        before: Number(value.before),
+        after: Number(value.after),
+        delta: value.delta !== undefined ? Number(value.delta) : Number(value.after) - Number(value.before),
+      };
+    });
+  }
+
+  const merged = { ...taskMetrics, ...sectionMetrics };
+  return {
+    psnr: merged["psnr"],
+    ssim: merged["ssim"],
+    mse: merged["mse"],
+    entropy: merged["entropy"],
+  };
+};
+
 export const ReportPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: tasks = [] } = useQuery<TaskSummary[]>({
     queryKey: ["tasks"],
     queryFn: () => fetchTasks(),
   });
-  const [selectedTaskId, setSelectedTaskId] = useState<string>();
+  const queryTaskId = searchParams.get("taskId") || undefined;
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(queryTaskId);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
+    if (queryTaskId && tasks.some((t) => t.id === queryTaskId)) {
+      setSelectedTaskId(queryTaskId);
+      return;
+    }
     if (!selectedTaskId && tasks.length > 0) {
       const preferred = tasks.find((task) => task.status === "completed") ?? tasks[0];
       setSelectedTaskId(preferred.id);
+      setSearchParams({ taskId: preferred.id });
     }
-  }, [tasks, selectedTaskId]);
+  }, [tasks, selectedTaskId, queryTaskId, setSearchParams]);
 
   const {
     data: report,
@@ -51,6 +96,7 @@ export const ReportPage = () => {
     () => tasks.find((task) => task.id === selectedTaskId),
     [tasks, selectedTaskId],
   );
+  const metricMap = useMemo(() => pickMetricMap(report, selectedTask), [report, selectedTask]);
   const primarySection = useMemo(() => report?.sections?.[0], [report]);
   const processedImageUrl = useMemo(
     () => (selectedTask?.status === "completed" && selectedTask?.id ? resolveResultUrl(selectedTask.id) : null),
@@ -118,7 +164,11 @@ export const ReportPage = () => {
               <select
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm focus:border-indigo-400 focus:outline-none"
                 value={selectedTaskId ?? ""}
-                onChange={(event) => setSelectedTaskId(event.target.value)}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setSelectedTaskId(nextId);
+                  setSearchParams(nextId ? { taskId: nextId } : {});
+                }}
               >
                 <option value="" disabled>
                   选择任务
@@ -172,19 +222,39 @@ export const ReportPage = () => {
               <p className="text-sm text-slate-500">{primarySection.summary}</p>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              {primarySection.metrics.map((metric) => {
-                const delta = Number(metric.delta);
-                const deltaText = delta > 0 ? `+${delta}` : `${delta}`;
-                const deltaColor = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-500" : "text-slate-500";
+              {[
+                { id: "psnr", label: "PSNR (dB)" },
+                { id: "ssim", label: "SSIM" },
+                { id: "mse", label: "MSE（越低越好）" },
+                { id: "entropy", label: "信息熵" },
+              ].map((meta) => {
+                const metric = metricMap[meta.id];
+                const after = metric?.after;
+                const before = metric?.before;
+                const delta = metric?.delta;
+                const deltaText =
+                  delta === undefined || isNaN(delta) ? "—" : delta > 0 ? `+${delta.toFixed(4)}` : `${delta.toFixed(4)}`;
+                const deltaColor =
+                  delta === undefined || isNaN(delta)
+                    ? "text-slate-500"
+                    : delta > 0
+                    ? "text-emerald-600"
+                    : delta < 0
+                    ? "text-rose-500"
+                    : "text-slate-500";
                 return (
                   <div
-                    key={metric.name}
+                    key={meta.id}
                     className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-[#f7f8fb] p-5 shadow-sm"
                   >
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.name}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{meta.label}</p>
                     <div className="mt-2 flex items-baseline gap-3">
-                      <p className="text-3xl font-bold text-slate-900">{metric.after}</p>
-                      <p className="text-sm text-slate-500">修复前 {metric.before}</p>
+                      <p className="text-3xl font-bold text-slate-900">
+                        {after === undefined || isNaN(after) ? "—" : after.toFixed(after < 10 ? 4 : 2)}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        修复前 {before === undefined || isNaN(before) ? "—" : before.toFixed(before < 10 ? 4 : 2)}
+                      </p>
                     </div>
                     <p className={`mt-1 text-xs font-semibold ${deltaColor}`}>提升 {deltaText}</p>
                   </div>
