@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     final2x_model_name: str = 'RealESRGAN_RealESRGAN_x4plus_4x'
     final2x_device: str = 'auto'
     final2x_target_scale: float = 2.0
-    final2x_use_tile: bool = False
-    final2x_tile_size: int = 128
+    final2x_use_tile: bool = True
+    final2x_tile_size: int = 192
     final2x_gh_proxy: str | None = None
     preview_enable_final2x: bool = True
 
@@ -45,4 +45,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_directories()
     return settings
-

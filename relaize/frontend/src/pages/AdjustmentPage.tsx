@@ -93,17 +93,13 @@ type ModelOption = {
 
 const MODEL_OPTIONS: ModelOption[] = [
   { id: "RealESRGAN_RealESRGAN_x4plus_4x", label: "RealESRGAN 4x", description: "通用写实增强" },
-  { id: "HAT_Real_GAN_4x", label: "HAT Real 4x", description: "夜景/低光更佳" },
-  { id: "SwinIR_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_GAN_4x", label: "SwinIR 实景 4x", description: "雾霾与去雾场景" },
-  { id: "DAT_light_2x", label: "DAT 2x", description: "日常/轻量增强" },
-  { id: "RealCUGAN_Conservative_2x", label: "RealCUGAN 2x", description: "动画/插画" },
 ];
 
 const PRESET_DEFAULT_MODELS: Record<PresetOption["id"], string> = {
-  night: "HAT_Real_GAN_4x",
-  haze: "SwinIR_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_GAN_4x",
+  night: "RealESRGAN_RealESRGAN_x4plus_4x",
+  haze: "RealESRGAN_RealESRGAN_x4plus_4x",
   vintage: "RealESRGAN_RealESRGAN_x4plus_4x",
-  daily: "DAT_light_2x",
+  daily: "RealESRGAN_RealESRGAN_x4plus_4x",
 };
 
 const isPresetOptionId = (value: string | null | undefined): value is PresetOption["id"] =>
@@ -296,6 +292,7 @@ export const AdjustmentPage = () => {
   useEffect(() => {
     if (!selectedTask?.id) {
       setPreviewImage(null);
+      setErrorMessage(null);
       return;
     }
 
@@ -306,7 +303,7 @@ export const AdjustmentPage = () => {
       }
       previewRequestRef.current += 1;
       setIsPreviewLoading(false);
-      setPreviewImage(null);
+      setErrorMessage(null);
       return;
     }
 
@@ -327,9 +324,11 @@ export const AdjustmentPage = () => {
         const response = await fetchTaskPreview(selectedTask.id, payload);
         if (previewRequestRef.current !== requestId) return;
         setPreviewImage(`data:image/png;base64,${response.preview_base64}`);
+        setErrorMessage(null);
       } catch (error) {
         if (previewRequestRef.current !== requestId) return;
         setPreviewImage(null);
+        setErrorMessage("预览生成失败，请检查后端日志或稍后重试。");
       } finally {
         if (previewRequestRef.current === requestId) {
           setIsPreviewLoading(false);
@@ -685,18 +684,10 @@ const applyPreset = (presetId: PresetOption["id"]) => {
           </dl>
           <div className="rounded-2xl border border-slate-100 bg-white/80 p-4">
             <p className="text-sm font-semibold text-slate-700">AI 模型</p>
-            <p className="text-xs text-slate-500">选择用于 Final2x 超分的模型</p>
-            <select
-              className="mt-3 w-full rounded-full border border-slate-200 px-4 py-2 text-base text-slate-700"
-              value={activeModelId}
-              onChange={(event) => handleModelChange(event.target.value)}
-            >
-              {MODEL_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label} · {option.description}
-                </option>
-              ))}
-            </select>
+            <p className="text-xs text-slate-500">使用固定的 Final2x 模型</p>
+            <p className="mt-3 w-full rounded-full bg-slate-100 px-4 py-2 text-base font-semibold text-slate-700">
+              RealESRGAN 4x · 通用
+            </p>
           </div>
           <div className="flex flex-col gap-4">
             <button

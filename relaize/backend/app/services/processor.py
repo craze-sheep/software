@@ -159,11 +159,8 @@ def enhance_image(
     tweaked_rgb = _apply_adjustment_pipeline(super_res_rgb, params)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(
-        str(destination),
-        cv2.cvtColor(tweaked_rgb, cv2.COLOR_RGB2BGR),
-        [int(cv2.IMWRITE_JPEG_QUALITY), 94],
-    )
+    # Save as PNG to avoid any lossy compression on output.
+    cv2.imwrite(str(destination), cv2.cvtColor(tweaked_rgb, cv2.COLOR_RGB2BGR), [int(cv2.IMWRITE_PNG_COMPRESSION), 3])
 
     before_metrics = _compute_metrics(original_rgb)
     after_metrics = _compute_metrics(tweaked_rgb)

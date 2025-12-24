@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import os
+import platform
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
+import warnings
+import logging
 
 import cv2
 import numpy as np
 
-# Setting the allocator hint up-front helps PyTorch reuse memory segments on 8GB GPUs.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+# Avoid unsupported allocator hint on Windows to silence torch warning.
+if platform.system() != "Windows":
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch
 from cccv import AutoModel, ConfigType
@@ -18,6 +22,13 @@ from Final2x_core.util.device import get_device
 from loguru import logger
 
 from app.core.config import get_settings
+
+
+ALLOWED_MODEL_IDS = {"RealESRGAN_RealESRGAN_x4plus_4x"}
+
+# Silence noisy warnings/logs from CCCV and allocator hint on Windows
+warnings.filterwarnings("ignore", message="expandable_segments not supported on this platform")
+logging.getLogger("cccv").setLevel(logging.ERROR)
 
 
 @dataclass(frozen=True)
@@ -50,11 +61,10 @@ class Final2xEngine:
     def _select_device(requested: str) -> str:
         if requested and requested.lower().startswith("cuda"):
             if not torch.cuda.is_available():
-                logger.warning(
-                    "CUDA device '{}' requested but torch.cuda.is_available() is False, falling back to CPU",
-                    requested,
+                raise RuntimeError(
+                    f"CUDA device '{requested}' requested but torch.cuda.is_available() is False. "
+                    "GPU is required for Final2x; please install CUDA or choose a different device."
                 )
-                return "cpu"
         return requested or "cpu"
 
     @staticmethod
@@ -163,10 +173,7 @@ class Final2xEngine:
                     continue
                 raise
 
-        if self._effective_device.startswith("cuda"):
-            logger.warning("Exhausted GPU tiles, reloading Final2x model on CPU as a fallback")
-            self._load_model(None, device_label="cpu")
-            return self._model.inference_image(image)
+        # All GPU attempts failed; propagate the original error instead of silently falling back to CPU.
         raise original_exc
 
     def _fallback_tile_sizes(self) -> list[int]:
@@ -208,10 +215,25 @@ def _build_engine(
     return Final2xEngine(config)
 
 
+def _normalize_model_id(model_name: str, fallback: str) -> str:
+    """Only allow configured Final2x model ids; otherwise fall back to default."""
+    normalized = model_name.replace(".pth", "")
+    if normalized not in ALLOWED_MODEL_IDS:
+        logger.warning(
+            "Model %s is not in allowed list %s, falling back to %s",
+            normalized,
+            sorted(ALLOWED_MODEL_IDS),
+            fallback,
+        )
+        return fallback
+    return normalized
+
+
 def get_final2x_engine(model_name: str | None = None) -> Final2xEngine:
     """Return a cached Final2x engine for the requested model."""
     settings = get_settings()
-    effective_name = (model_name or settings.final2x_model_name).replace(".pth", "")
+    fallback = settings.final2x_model_name.replace(".pth", "")
+    effective_name = _normalize_model_id(model_name or fallback, fallback)
     return _build_engine(
         effective_name,
         settings.final2x_device,
@@ -223,10 +245,10 @@ def get_final2x_engine(model_name: str | None = None) -> Final2xEngine:
 
 
 PRESET_MODEL_OVERRIDES: dict[str, str] = {
-    "night": "HAT_Real_GAN_4x",
-    "haze": "SwinIR_realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_GAN_4x",
+    "night": "RealESRGAN_RealESRGAN_x4plus_4x",
+    "haze": "RealESRGAN_RealESRGAN_x4plus_4x",
     "vintage": "RealESRGAN_RealESRGAN_x4plus_4x",
-    "daily": "DAT_light_2x",
+    "daily": "RealESRGAN_RealESRGAN_x4plus_4x",
 }
 
 
@@ -235,8 +257,10 @@ def resolve_model_for_adjustments(adjustments: dict[str, Any] | None) -> str | N
         return None
     explicit = adjustments.get("model_name")
     if explicit:
-        return explicit
+        return _normalize_model_id(explicit, get_settings().final2x_model_name.replace(".pth", ""))
     preset_id = adjustments.get("preset_id")
     if preset_id:
-        return PRESET_MODEL_OVERRIDES.get(preset_id)
+        override = PRESET_MODEL_OVERRIDES.get(preset_id)
+        if override:
+            return _normalize_model_id(override, get_settings().final2x_model_name.replace(".pth", ""))
     return None

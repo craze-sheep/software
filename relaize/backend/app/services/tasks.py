@@ -100,11 +100,7 @@ class TaskService:
             task_id,
             TaskUpdate(
                 status=TaskStatus.completed,
-                metrics=metrics
-                or {
-                    "uiqm": {"before": 2.1, "after": 3.8, "delta": 1.7},
-                    "uciqe": {"before": 0.45, "after": 0.62, "delta": 0.17},
-                },
+                metrics=metrics,
             ),
         )
 
@@ -155,8 +151,8 @@ class TaskService:
         return self.upload_dir / f"{task.id}_{task.filename}"
 
     def get_processed_path(self, task: TaskDetail) -> Path:
-        suffix = Path(task.filename).suffix or ".jpg"
-        return self.processed_dir / f"{task.id}{suffix}"
+        # Always store processed output as PNG to avoid lossy compression.
+        return self.processed_dir / f"{task.id}.png"
 
 
 def get_task_service(upload_dir: Path, processed_dir: Path, redis_client: Redis) -> TaskService:

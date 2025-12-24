@@ -13,11 +13,7 @@ class ReportService:
 
     def generate(self, task_id: str) -> ReportResponse:
         task: TaskDetail = self._task_lookup(task_id)
-        metric_map = task.metrics or {
-            'uiqm': {'before': 2.1, 'after': 3.8, 'delta': 1.7},
-            'uciqe': {'before': 0.45, 'after': 0.62, 'delta': 0.17},
-            'entropy': {'before': 6.2, 'after': 7.1, 'delta': 0.9},
-        }
+        metric_map = task.metrics or {}
         sections: List[ReportSection] = [
             ReportSection(
                 title='定量指标',
@@ -35,7 +31,7 @@ class ReportService:
         return ReportResponse(
             task_id=task.id,
             generated_at=datetime.utcnow(),
-            overview='图像修复评估报告（示例）',
+            overview='图像修复评估报告',
             sections=sections,
             recommendations=recommendations,
         )
