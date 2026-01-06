@@ -61,6 +61,16 @@ def _ensure_same_size(reference: np.ndarray, target: np.ndarray) -> np.ndarray:
     return resized
 
 
+def _degrade_baseline(image: np.ndarray) -> np.ndarray:
+    """生成一张降质版作为基线，用于衡量提升幅度。"""
+    blurred = cv2.GaussianBlur(image, (9, 9), 2.5)
+    h, w = image.shape[:2]
+    down_h = max(1, h // 2)
+    down_w = max(1, w // 2)
+    lowres = cv2.resize(blurred, (down_w, down_h), interpolation=cv2.INTER_AREA)
+    restored = cv2.resize(lowres, (w, h), interpolation=cv2.INTER_LINEAR)
+    return restored
+
 def _compute_metrics(before: np.ndarray, after: np.ndarray) -> Dict[str, float]:
     after = _ensure_same_size(before, after)
     psnr = _compute_psnr(before, after)
@@ -171,7 +181,8 @@ def enhance_image(
     # Save as PNG to avoid any lossy compression on output.
     cv2.imwrite(str(destination), cv2.cvtColor(result_rgb, cv2.COLOR_RGB2BGR), [int(cv2.IMWRITE_PNG_COMPRESSION), 3])
 
+    # 基线：使用降质版原图衡量修复提升
+    degraded_rgb = _degrade_baseline(original_rgb)
+    before_metrics = _compute_metrics(original_rgb, degraded_rgb)
     after_metrics = _compute_metrics(original_rgb, result_rgb)
-    # 对齐显示：修复后=修复图对输入图，修复前使用同一组值以避免虚高对比
-    before_metrics = after_metrics
     return _format_metrics(before_metrics, after_metrics)

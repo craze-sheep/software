@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     processed_dir: Path = STORAGE_ROOT / 'processed'
     report_dir: Path = STORAGE_ROOT / 'reports'
 
+    database_url: str = 'mysql+pymysql://root:password@localhost:3306/relaize'
+
     redis_url: str = 'redis://localhost:6379/0'
     final2x_enabled: bool = True
     final2x_model_name: str = 'RealESRGAN_RealESRGAN_x4plus_4x'

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { applyAdjustments, fetchTaskDetail, fetchTasks, resolveFileUrl, resolveResultUrl } from "../lib/api";
+import { downloadBinaryFile } from "../lib/download";
 import type { TaskDetail, TaskSummary } from "../types/tasks";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
@@ -57,6 +58,7 @@ export const AdjustmentPage = () => {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (!tasks.length) return;
@@ -136,6 +138,25 @@ export const AdjustmentPage = () => {
       navigate(`/report?taskId=${selectedTask.id}`);
     } else {
       navigate("/report");
+    }
+  };
+
+  const handleDownloadResult = async () => {
+    if (!afterImage || !selectedTask || selectedTask.status !== "completed") {
+      setErrorMessage("暂无可下载的修复结果");
+      return;
+    }
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsDownloading(true);
+    try {
+      await downloadBinaryFile(afterImage, `enhanced-${selectedTask.filename}`);
+      setStatusMessage("修复结果下载已开始");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("下载失败，请稍后再试");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -275,6 +296,13 @@ export const AdjustmentPage = () => {
               disabled={!selectedTask}
             >
               查看效果对比
+            </button>
+            <button
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-60"
+              onClick={handleDownloadResult}
+              disabled={!afterImage || isDownloading}
+            >
+              {isDownloading ? "下载中…" : "下载修复图像"}
             </button>
             <button
               className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"

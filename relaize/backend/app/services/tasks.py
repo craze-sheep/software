@@ -3,12 +3,14 @@ from __future__ import annotations
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 from uuid import uuid4
 
 from fastapi import UploadFile
 from redis import Redis
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.models.task import TaskRecord
 from app.schemas.tasks import AdjustmentPayload, TaskDetail, TaskStatus, TaskSummary, TaskUpdate
 
 
@@ -17,25 +19,77 @@ class TaskService:
     TASK_QUEUE_KEY = "tasks:queue"
     TASK_DATA_PREFIX = "tasks:data:"
 
-    def __init__(self, upload_dir: Path, processed_dir: Path, redis_client: Redis):
+    def __init__(
+        self,
+        upload_dir: Path,
+        processed_dir: Path,
+        redis_client: Redis,
+        db_session_factory: sessionmaker | None = None,
+    ):
         self.upload_dir = upload_dir
         self.processed_dir = processed_dir
         self.redis = redis_client
+        self.db_session_factory = db_session_factory
 
     def _task_key(self, task_id: str) -> str:
         return f"{self.TASK_DATA_PREFIX}{task_id}"
 
-    def _save_task(self, task: TaskDetail) -> TaskDetail:
+    def _save_task_to_cache(self, task: TaskDetail) -> None:
         pipeline = self.redis.pipeline()
         pipeline.set(self._task_key(task.id), task.model_dump_json())
         pipeline.zadd(self.TASK_INDEX_KEY, {task.id: task.created_at.timestamp()})
         pipeline.execute()
+
+    def _save_task_to_db(self, task: TaskDetail) -> None:
+        if not self.db_session_factory:
+            return
+        with self.db_session_factory() as session:  # type: Session
+            record = session.get(TaskRecord, task.id) or TaskRecord(id=task.id)
+            record.filename = task.filename
+            record.size = task.size
+            record.content_type = task.content_type
+            record.status = task.status
+            record.created_at = task.created_at
+            record.updated_at = task.updated_at
+            record.processed_at = task.processed_at
+            record.source_url = task.source_url
+            record.metrics = task.metrics
+            record.adjustments = task.adjustments
+            record.message = task.message
+            session.add(record)
+            session.commit()
+
+    def _save_task(self, task: TaskDetail) -> TaskDetail:
+        self._save_task_to_cache(task)
+        self._save_task_to_db(task)
         return task
 
     def _deserialize(self, raw: str | None) -> TaskDetail:
         if not raw:
             raise KeyError("task not found")
         return TaskDetail.model_validate_json(raw)
+
+    def _deserialize_from_db(self, task_id: str) -> TaskDetail:
+        if not self.db_session_factory:
+            raise KeyError("task not found in db")
+        with self.db_session_factory() as session:  # type: Session
+            record = session.get(TaskRecord, task_id)
+            if not record:
+                raise KeyError("task not found in db")
+            return TaskDetail(
+                id=record.id,
+                filename=record.filename,
+                size=record.size,
+                content_type=record.content_type,
+                status=record.status,
+                created_at=record.created_at,
+                updated_at=record.updated_at,
+                processed_at=record.processed_at,
+                source_url=record.source_url,
+                metrics=record.metrics,
+                adjustments=record.adjustments,
+                message=record.message,
+            )
 
     def create_from_upload(self, file: UploadFile) -> TaskDetail:
         task_id = str(uuid4())
@@ -61,6 +115,30 @@ class TaskService:
         offset: int = 0,
         limit: int = 50,
     ) -> List[TaskSummary]:
+        if self.db_session_factory:
+            with self.db_session_factory() as session:  # type: Session
+                query = session.query(TaskRecord)
+                if status_filter:
+                    query = query.filter(TaskRecord.status == status_filter)
+                query = query.order_by(TaskRecord.created_at.desc()).offset(offset).limit(limit)
+                records = query.all()
+                return [
+                    TaskSummary(
+                        id=record.id,
+                        filename=record.filename,
+                        size=record.size,
+                        content_type=record.content_type,
+                        status=record.status,
+                        created_at=record.created_at,
+                        updated_at=record.updated_at,
+                        processed_at=record.processed_at,
+                        source_url=record.source_url,
+                        metrics=record.metrics,
+                        adjustments=record.adjustments,
+                    )
+                    for record in records
+                ]
+
         end = offset + limit - 1
         task_ids = self.redis.zrevrange(self.TASK_INDEX_KEY, offset, end)
         if not task_ids:
@@ -83,7 +161,12 @@ class TaskService:
 
     def get_task(self, task_id: str) -> TaskDetail:
         raw = self.redis.get(self._task_key(task_id))
-        return self._deserialize(raw)
+        if raw:
+            return self._deserialize(raw)
+        # Fallback to DB if cache missed
+        detail = self._deserialize_from_db(task_id)
+        self._save_task_to_cache(detail)
+        return detail
 
     def update_task(self, task_id: str, payload: TaskUpdate) -> TaskDetail:
         task = self.get_task(task_id)
@@ -167,10 +250,36 @@ class TaskService:
     def clear_all(self, delete_files: bool = True) -> int:
         task_ids = self.redis.zrevrange(self.TASK_INDEX_KEY, 0, -1)
         tasks: list[TaskDetail] = []
+
+        # Pull tasks from cache if possible
         if task_ids:
             raw_tasks = self._mget_tasks(task_ids)
             tasks = [self._deserialize(raw) for raw in raw_tasks if raw]
 
+        # If cache is empty but DB is enabled, fetch from DB as fallback
+        db_records = []
+        if self.db_session_factory:
+            with self.db_session_factory() as session:  # type: Session
+                db_records = session.query(TaskRecord).all()
+                if not tasks:
+                    for record in db_records:
+                        tasks.append(
+                            TaskDetail(
+                                id=record.id,
+                                filename=record.filename,
+                                size=record.size,
+                                content_type=record.content_type,
+                                status=record.status,
+                                created_at=record.created_at,
+                                updated_at=record.updated_at,
+                                processed_at=record.processed_at,
+                                source_url=record.source_url,
+                                metrics=record.metrics,
+                                adjustments=record.adjustments,
+                                message=record.message,
+                            )
+                        )
+        # Delete files on disk
         if delete_files:
             for task in tasks:
                 for path in (self.get_source_path(task), self.get_processed_path(task)):
@@ -179,13 +288,22 @@ class TaskService:
                     except OSError:
                         continue
 
+        # Clean Redis
         pipeline = self.redis.pipeline()
-        keys_to_delete = [self._task_key(task_id) for task_id in task_ids]
+        keys_to_delete = [self._task_key(task.id) for task in tasks] if tasks else [self._task_key(tid) for tid in task_ids]
         if keys_to_delete:
             pipeline.delete(*keys_to_delete)
         pipeline.delete(self.TASK_INDEX_KEY, self.TASK_QUEUE_KEY)
         pipeline.execute()
+
+        # Clean DB
+        if self.db_session_factory:
+            with self.db_session_factory() as session:  # type: Session
+                session.query(TaskRecord).delete(synchronize_session=False)
+                session.commit()
+
         return len(tasks)
+
     def get_source_path(self, task: TaskDetail) -> Path:
         return self.upload_dir / f"{task.id}_{task.filename}"
 
@@ -194,5 +312,10 @@ class TaskService:
         return self.processed_dir / f"{task.id}.png"
 
 
-def get_task_service(upload_dir: Path, processed_dir: Path, redis_client: Redis) -> TaskService:
-    return TaskService(upload_dir, processed_dir, redis_client)
+def get_task_service(
+    upload_dir: Path,
+    processed_dir: Path,
+    redis_client: Redis,
+    db_session_factory: Optional[sessionmaker] = None,
+) -> TaskService:
+    return TaskService(upload_dir, processed_dir, redis_client, db_session_factory=db_session_factory)

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "classnames";
 
 import { fetchTasks, resolveFileUrl, resolveResultUrl } from "../lib/api";
+import { downloadBinaryFile } from "../lib/download";
 import type { TaskSummary } from "../types/tasks";
 
 type Mode = "split" | "slider";
@@ -297,17 +298,10 @@ export const ComparisonPage = () => {
       return;
     }
     try {
-      const response = await fetch(target);
-      if (!response.ok) throw new Error("failed to fetch");
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = `${variant === "before" ? "original" : "enhanced"}-${selectedTask.filename}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(blobUrl);
+      await downloadBinaryFile(
+        target,
+        `${variant === "before" ? "original" : "enhanced"}-${selectedTask.filename}`,
+      );
       setFeedback({
         tone: "success",
         message: `${variant === "before" ? "原始图像" : "修复图像"}已开始下载`,

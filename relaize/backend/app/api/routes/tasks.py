@@ -50,7 +50,11 @@ def get_task_result(
     output_path = task_service.get_processed_path(task)
     if not output_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result not available yet")
-    return FileResponse(output_path)
+    return FileResponse(
+        output_path,
+        media_type="image/png",
+        filename=output_path.name,
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskDetail)
@@ -78,7 +82,11 @@ def get_task_source(
     source_path = task_service.get_source_path(task)
     if not source_path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
-    return FileResponse(source_path)
+    return FileResponse(
+        source_path,
+        media_type=task.content_type or "application/octet-stream",
+        filename=source_path.name,
+    )
 
 
 @router.post("/{task_id}/process", response_model=TaskDetail)

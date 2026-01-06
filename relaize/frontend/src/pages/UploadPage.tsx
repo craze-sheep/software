@@ -11,6 +11,7 @@ import {
   resolveResultUrl,
   uploadImage,
 } from "../lib/api";
+import { downloadBinaryFile } from "../lib/download";
 import type { TaskSummary } from "../types/tasks";
 import { StatusBadge } from "../components/ui/StatusBadge";
 
@@ -289,19 +290,7 @@ export const UploadPage = () => {
       return;
     }
     try {
-      const response = await fetch(fileUrl);
-      if (!response.ok) {
-        throw new Error("failed to fetch result");
-      }
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = `enhanced-${task.filename}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(blobUrl);
+      await downloadBinaryFile(fileUrl, `enhanced-${task.filename}`);
       setStatusMessage(`已下载 ${task.filename} 的修复结果`);
       setErrorMessage(null);
     } catch (error) {

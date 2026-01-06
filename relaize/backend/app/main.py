@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import api_router
 from app.core.config import get_settings
+from app.db import Base, SessionLocal, engine
+from app.models import task as task_models
 from app.services import registry
 from app.services.redis_client import get_redis_client
 from app.services.reports import ReportService
@@ -17,9 +19,16 @@ from app.workers.processor import TaskWorker
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    # ensure tables exist
+    Base.metadata.create_all(bind=engine)
     redis_client = get_redis_client()
     registry.redis_client = redis_client
-    registry.task_service = TaskService(settings.upload_dir, settings.processed_dir, redis_client)
+    registry.task_service = TaskService(
+        settings.upload_dir,
+        settings.processed_dir,
+        redis_client,
+        db_session_factory=SessionLocal,
+    )
     registry.report_service = ReportService(registry.task_service.get_task)
     worker = TaskWorker(registry.task_service, redis_client, settings.upload_dir, settings.processed_dir)
     worker.start()
