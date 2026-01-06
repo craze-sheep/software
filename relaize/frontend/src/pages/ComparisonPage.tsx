@@ -137,7 +137,7 @@ export const ComparisonPage = () => {
       },
       {
         id: "mse",
-        label: "MSE（越低越好）",
+        label: "MSE",
         value: metricValue(metricsMap.mse),
         percent: formatPercentChange(metricsMap.mse, true),
         summary: `均方误差 ${metricsMap.mse.before} → ${metricsMap.mse.after}`,

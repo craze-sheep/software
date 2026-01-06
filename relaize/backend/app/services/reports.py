@@ -17,7 +17,7 @@ class ReportService:
         sections: List[ReportSection] = [
             ReportSection(
                 title='定量指标',
-                summary='核心质量指标显著提升，实验值符合文档中的目标。',
+                summary='',
                 metrics=[
                     MetricPair(name=name.upper(), **values)
                     for name, values in metric_map.items()

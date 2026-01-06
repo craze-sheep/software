@@ -74,6 +74,7 @@ export const ReportPage = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewVersion, setPreviewVersion] = useState(0);
   const reportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -116,7 +117,7 @@ export const ReportPage = () => {
     () => [
       { id: "psnr", label: "PSNR (dB)", metric: metricMap.psnr },
       { id: "ssim", label: "SSIM", metric: metricMap.ssim },
-      { id: "mse", label: "MSE（越低越好）", metric: metricMap.mse },
+      { id: "mse", label: "MSE", metric: metricMap.mse },
       { id: "entropy", label: "信息熵", metric: metricMap.entropy },
     ],
     [metricMap],
@@ -140,6 +141,7 @@ export const ReportPage = () => {
 
   useEffect(() => {
     setPreviewError(null);
+    setPreviewVersion(0);
     if (processedImageUrl) {
       setPreviewUrl(processedImageUrl);
     } else if (sourceImageUrl) {
@@ -149,6 +151,12 @@ export const ReportPage = () => {
     }
   }, [processedImageUrl, sourceImageUrl]);
 
+  const cacheBustedPreviewUrl = useMemo(() => {
+    if (!previewUrl) return null;
+    const separator = previewUrl.includes("?") ? "&" : "?";
+    return `${previewUrl}${separator}v=${previewVersion}`;
+  }, [previewUrl, previewVersion]);
+
   const handleExportPdf = async () => {
     if (!report || !reportRef.current) {
       setActionError("暂无可导出的报告，请等待任务完成后再试。");
@@ -157,11 +165,82 @@ export const ReportPage = () => {
     setActionError(null);
     setActionMessage(null);
     setIsExportingPdf(true);
-    try {
-      // 确保图片已加载，避免 html2canvas 丢失图像
-      const images: NodeListOf<HTMLImageElement> = reportRef.current.querySelectorAll("img");
+    const buildExportClone = async () => {
+      const source = reportRef.current;
+      if (!source) return null;
+      const clone = source.cloneNode(true) as HTMLDivElement;
+      const { width, height } = source.getBoundingClientRect();
+      clone.style.position = "fixed";
+      clone.style.left = "-99999px";
+      clone.style.top = "0";
+      clone.style.opacity = "1";
+      clone.style.pointerEvents = "none";
+      clone.style.width = `${width}px`;
+      clone.style.height = `${height}px`;
+      clone.style.boxSizing = "border-box";
+      const bg = window.getComputedStyle(source).background;
+      if (bg) clone.style.background = bg;
+      document.body.appendChild(clone);
+
+      // Replace selects with plain text for cleaner capture
+      const selects = Array.from(clone.querySelectorAll("select"));
+      selects.forEach((select) => {
+        const replacement = document.createElement("div");
+        const rect = select.getBoundingClientRect();
+        const styles = window.getComputedStyle(select);
+        replacement.className = select.className;
+        const selected = (select as HTMLSelectElement).selectedOptions?.[0]?.textContent;
+        replacement.textContent = selected ?? (select as HTMLSelectElement).value ?? "";
+        replacement.style.display = "flex";
+        replacement.style.alignItems = "center";
+        replacement.style.justifyContent = "flex-start";
+        replacement.style.whiteSpace = "nowrap";
+        replacement.style.wordBreak = "normal";
+        replacement.style.textAlign = "left";
+        replacement.style.overflow = "hidden";
+        replacement.style.textOverflow = "ellipsis";
+        replacement.style.width = `${rect.width}px`;
+        replacement.style.height = `${rect.height}px`;
+        replacement.style.boxSizing = "border-box";
+        replacement.style.padding = styles.padding;
+        replacement.style.border = styles.border;
+        replacement.style.borderRadius = styles.borderRadius;
+        replacement.style.background = styles.background;
+        replacement.style.color = styles.color;
+        replacement.style.fontSize = styles.fontSize;
+        replacement.style.fontWeight = styles.fontWeight;
+        replacement.style.lineHeight = styles.lineHeight;
+        replacement.style.fontFamily = styles.fontFamily;
+        select.replaceWith(replacement);
+      });
+
+      // Inline images on the clone to avoid CORS/taint
+      const images = Array.from(clone.querySelectorAll("img"));
       await Promise.all(
-        Array.from(images).map(
+        images.map(async (img) => {
+          const src = img.getAttribute("src");
+          if (!src || src.startsWith("data:")) return;
+          img.setAttribute("crossorigin", "anonymous");
+          try {
+            const response = await fetch(src, { credentials: "include", mode: "cors", cache: "no-cache" });
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(String(reader.result));
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(blob);
+            });
+            img.setAttribute("src", dataUrl);
+            await img.decode().catch(() => undefined);
+          } catch (error) {
+            console.warn("inline image failed", src, error);
+          }
+        }),
+      );
+
+      await Promise.all(
+        images.map(
           (img) =>
             new Promise<void>((resolve) => {
               if (img.complete) return resolve();
@@ -170,24 +249,35 @@ export const ReportPage = () => {
             }),
         ),
       );
-      const canvas = await html2canvas(reportRef.current, {
+
+      return clone;
+    };
+
+    let exportClone: HTMLDivElement | null = null;
+    try {
+      await document.fonts?.ready;
+      exportClone = await buildExportClone();
+      const canvasTarget = exportClone ?? reportRef.current;
+      const canvas = await html2canvas(canvasTarget, {
         backgroundColor: "#ffffff",
         scale: window.devicePixelRatio > 1 ? 2 : 1.5,
-        useCORS: true,
-        imageTimeout: 15000,
+        useCORS: false,
+        imageTimeout: 20000,
         scrollX: 0,
-        scrollY: -window.scrollY,
+        scrollY: 0,
         ignoreElements: (element) => element.dataset?.exportIgnore === "true",
       });
       const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "pt", "a4");
+      const orientation = canvas.width > canvas.height ? "l" : "p";
+      const pdf = new jsPDF(orientation, "pt", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const ratio = Math.min(pageWidth / canvas.width, (pageHeight - 40) / canvas.height);
+      const margin = 28;
+      const ratio = Math.min((pageWidth - margin * 2) / canvas.width, (pageHeight - margin * 2) / canvas.height);
       const imgWidth = canvas.width * ratio;
       const imgHeight = canvas.height * ratio;
       const offsetX = (pageWidth - imgWidth) / 2;
-      pdf.addImage(imgData, "PNG", offsetX, 20, imgWidth, imgHeight);
+      pdf.addImage(imgData, "PNG", offsetX, margin, imgWidth, imgHeight);
       const filenameSafe = (selectedTask?.filename ?? selectedTaskId ?? "report").replace(/\s+/g, "-");
       pdf.save(`report-${filenameSafe}.pdf`);
       setActionMessage("报告 PDF 导出完成。");
@@ -195,6 +285,9 @@ export const ReportPage = () => {
       console.error(error);
       setActionError("导出 PDF 失败，请稍后重试。");
     } finally {
+      if (exportClone?.parentNode) {
+        exportClone.parentNode.removeChild(exportClone);
+      }
       setIsExportingPdf(false);
     }
   };
@@ -256,7 +349,7 @@ export const ReportPage = () => {
                 ) : null}
               </div>
             </div>
-            <div className="flex w-full flex-col gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 md:w-72">
+            <div className="flex w-full flex-col gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 md:w-80 md:min-w-[320px] md:max-w-[360px] md:ml-auto md:self-start md:items-start">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">选择任务</span>
                 <button
@@ -285,16 +378,6 @@ export const ReportPage = () => {
                   </option>
                 ))}
               </select>
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>生成时间</span>
-                <span>{report ? dateFormatter.format(new Date(report.generated_at)) : "—"}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>文件名</span>
-                <span className="max-w-[180px] truncate text-right font-semibold text-slate-700" title={displayFilename}>
-                  {displayFilename}
-                </span>
-              </div>
             </div>
           </div>
         </section>
@@ -310,68 +393,38 @@ export const ReportPage = () => {
         ) : null}
 
         {report ? (
-          <section className="grid gap-5 md:grid-cols-[1.6fr_1fr]">
-            <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.08)]">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-slate-900">定量指标</h3>
-                  <p className="text-sm text-slate-500">{primarySection?.summary ?? "核心质量指标一览。"}</p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  样本：
-                  <span className="ml-1 max-w-[220px] truncate align-middle" title={displayFilename}>
-                    {displayFilename}
-                  </span>
-                </span>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {metricsList.map((meta) => {
-                  const metric = meta.metric;
-                  const after = metric?.after;
-                  const before = metric?.before;
-                  const delta = metric?.delta;
-                  const deltaValid = delta !== undefined && !isNaN(delta);
-                  const deltaText = !deltaValid ? "—" : delta > 0 ? `+${delta.toFixed(4)}` : `${delta.toFixed(4)}`;
-                  const deltaColor = !deltaValid
-                    ? "text-slate-500"
-                    : delta > 0
-                    ? "text-emerald-600"
-                    : delta < 0
-                    ? "text-rose-500"
-                    : "text-slate-500";
-                  return (
-                    <div
-                      key={meta.id}
-                      className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-[#f7f8fb] p-5 shadow-sm"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{meta.label}</p>
-                        <span className={`text-xs font-semibold ${deltaColor}`}>{deltaValid ? `提升 ${deltaText}` : "—"}</span>
-                      </div>
-                      <div className="mt-3 flex items-baseline gap-3">
-                        <p className="text-3xl font-bold text-slate-900">
-                          {after === undefined || isNaN(after) ? "—" : after.toFixed(after < 10 ? 4 : 2)}
-                        </p>
-                        <p className="text-sm text-slate-500">
-                          修复前 {before === undefined || isNaN(before) ? "—" : before.toFixed(before < 10 ? 4 : 2)}
-                        </p>
-                      </div>
-                      <div className="mt-3 h-2 rounded-full bg-slate-100">
-                        <div
-                          className={`h-2 rounded-full ${delta && delta < 0 ? "bg-rose-300" : "bg-indigo-400"}`}
-                          style={{
-                            width: delta === undefined || isNaN(delta) ? "12%" : `${Math.min(Math.abs(delta) * 8 + 20, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <section className="grid items-stretch gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_10px_40px_rgba(0,0,0,0.08)]">
+              {sourceImageUrl && processedImageUrl ? (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="text-lg font-semibold text-slate-900">修复前后对比</h4>
+                    <span className="text-xs font-semibold text-slate-500">左：原始 · 右：修复</span>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    {[
+                      { label: "原始图像", url: sourceImageUrl },
+                      { label: "模型输出", url: processedImageUrl },
+                        ].map((item) => (
+                          <div key={item.label} className="flex flex-col gap-3 rounded-2xl bg-slate-50 p-4">
+                            <span className="text-xs font-semibold text-slate-600">{item.label}</span>
+                            <img
+                              src={item.url}
+                              alt={item.label}
+                              className="h-auto max-h-[900px] w-full rounded-xl bg-white object-contain"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-slate-500">暂无对比图可展示</div>
+              )}
             </div>
 
-            <div className="flex flex-col gap-4">
-              <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-[0_10px_40px_rgba(0,0,0,0.08)]">
+            <div className="grid h-full grid-rows-[auto_1fr] gap-4">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_10px_40px_rgba(0,0,0,0.08)]">
                 <div className="mb-3 flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-slate-900">处理信息</h4>
                   <span className="text-xs font-semibold text-indigo-600">{statusLabel}</span>
@@ -385,51 +438,77 @@ export const ReportPage = () => {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-slate-500">任务 ID</dt>
-                    <dd className="truncate text-right font-semibold text-slate-800" title={selectedTask?.id}>
+                    <dd
+                      className="max-w-[300px] truncate text-right font-semibold leading-5 text-slate-800"
+                      title={selectedTask?.id}
+                    >
                       {selectedTask?.id ?? "—"}
                     </dd>
                   </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-500">文件名</dt>
-                  <dd className="max-w-[180px] truncate text-right font-semibold text-slate-800" title={displayFilename}>
-                    {displayFilename}
-                  </dd>
-                </div>
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">文件大小</dt>
-                    <dd className="font-semibold text-slate-800">
-                      {selectedTask?.size ? `${(selectedTask.size / 1024 / 1024).toFixed(2)} MB` : "—"}
+                    <dt className="text-slate-500">文件名</dt>
+                    <dd
+                      className="max-w-[300px] truncate text-right font-semibold leading-5 text-slate-800"
+                      title={displayFilename}
+                    >
+                      {displayFilename}
                     </dd>
                   </div>
                 </dl>
               </div>
 
-              {previewUrl ? (
-                <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
-                  <div className="flex items-center justify-between px-5 pb-3 pt-4">
-                    <h4 className="text-lg font-semibold text-slate-900">修复结果预览</h4>
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">完成</span>
-                  </div>
-                  <div className="bg-slate-50 p-4">
-                    <img
-                      src={previewUrl}
-                      alt="修复结果"
-                      className="max-h-72 w-full rounded-2xl object-contain bg-white"
-                      loading="lazy"
-                      crossOrigin="anonymous"
-                      onError={() => {
-                        if (previewUrl !== sourceImageUrl && sourceImageUrl) {
-                          setPreviewUrl(sourceImageUrl);
-                          setPreviewError("修复图加载失败，已回退到原图预览");
-                          return;
-                        }
-                        setPreviewError("图像预览加载失败，请下载后查看");
-                      }}
-                    />
-                    {previewError ? <p className="mt-2 text-xs text-amber-600">{previewError}</p> : null}
+              <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-[0_10px_40px_rgba(0,0,0,0.08)]">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">定量指标</h3>
+                    <p className="text-[11px] text-slate-500">{primarySection?.summary ?? "核心质量指标一览。"}</p>
                   </div>
                 </div>
-              ) : null}
+                <div className="grid gap-2.5 md:grid-cols-2">
+                  {metricsList.map((meta) => {
+                    const metric = meta.metric;
+                    const after = metric?.after;
+                    const before = metric?.before;
+                    const delta = metric?.delta;
+                    const deltaValid = delta !== undefined && !isNaN(delta);
+                    const deltaText = !deltaValid ? "—" : delta > 0 ? `+${delta.toFixed(4)}` : `${delta.toFixed(4)}`;
+                    const deltaColor = !deltaValid
+                      ? "text-slate-500"
+                      : delta > 0
+                      ? "text-emerald-600"
+                      : delta < 0
+                      ? "text-rose-500"
+                      : "text-slate-500";
+                    return (
+                      <div
+                        key={meta.id}
+                        className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-[#f7f8fb] p-3 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{meta.label}</p>
+                          <span className={`text-[10px] font-semibold ${deltaColor}`}>{deltaValid ? `提升 ${deltaText}` : "—"}</span>
+                        </div>
+                        <div className="mt-2 flex items-baseline gap-2">
+                          <p className="text-lg font-bold text-slate-900">
+                            {after === undefined || isNaN(after) ? "—" : after.toFixed(after < 10 ? 4 : 2)}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            修复前 {before === undefined || isNaN(before) ? "—" : before.toFixed(before < 10 ? 4 : 2)}
+                          </p>
+                        </div>
+                        <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                          <div
+                            className={`h-1.5 rounded-full ${delta && delta < 0 ? "bg-rose-300" : "bg-indigo-400"}`}
+                            style={{
+                              width: delta === undefined || isNaN(delta) ? "12%" : `${Math.min(Math.abs(delta) * 8 + 20, 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </section>
         ) : null}
